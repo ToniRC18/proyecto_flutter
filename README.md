@@ -202,12 +202,5 @@ Siga estos pasos para ejecutar el proyecto localmente:
 
 ---
 
-## 👥 Autores
-
-*   **Universidad de Monterrey (UDEM)**
-*   **Materia:** Desarrollo de Aplicaciones Móviles
-*   **Desarrollado por:** [Toni Rosas Castillo](https://github.com/ToniRC18) y [Nombre del Compañero]
-*   **Semestre:** Primavera 2026
-
 ---
 © 2026 Bruma - Finanzas con menos estrés.
