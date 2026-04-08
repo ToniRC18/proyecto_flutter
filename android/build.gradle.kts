@@ -1,3 +1,10 @@
+buildscript {
+    dependencies {
+        // Plugin de Google Services necesario para Firebase
+        classpath("com.google.gms:google-services:4.4.2")
+    }
+}
+
 allprojects {
     repositories {
         google()
