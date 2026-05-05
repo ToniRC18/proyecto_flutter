@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/widgets/bruma_offline_error.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/glass_card.dart';
 import '../../data/dashboard_repository.dart';
@@ -38,7 +39,7 @@ class WeeklySpendBar extends ConsumerWidget {
               loading: () => const Center(
                 child: CircularProgressIndicator(color: AppColors.primary),
               ),
-              error: (err, __) => Center(child: Text('Error: $err')),
+              error: (err, stack) => buildAsyncError(err, stack),
               data: (data) {
                 final spent = data['spent']!;
                 final limit = data['limit']!;

@@ -12,6 +12,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/amount_input_field.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
 import '../../../core/widgets/transaction_list_item.dart';
 import '../../accounts/data/accounts_repository.dart';
@@ -46,7 +47,6 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
 
   @override
   void dispose() {
-    ref.read(activeTenantOverrideProvider.notifier).state = null;
     super.dispose();
   }
 
@@ -174,7 +174,10 @@ class _SpaceDetailScreenState extends ConsumerState<SpaceDetailScreen> {
         backgroundColor: b.bg,
         elevation: 0,
         leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            ref.read(activeTenantOverrideProvider.notifier).state = null;
+            Navigator.of(context).pop();
+          },
           icon: Icon(Iconsax.arrow_left, color: b.textPrimary),
         ),
         title: spaceAsync.maybeWhen(
@@ -256,7 +259,12 @@ class _SummarySection extends ConsumerWidget {
       child: spaceAsync.when(
         loading: () =>
             Center(child: CircularProgressIndicator(color: b.primary)),
-        error: (error, _) => _SmallError(message: 'Error: $error'),
+        error: (error, stack) => buildAsyncError(
+          error,
+          stack,
+          onRetry: () => ref.invalidate(sharedSpaceProvider(tenantId)),
+          context: context,
+        ),
         data: (space) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -320,7 +328,12 @@ class _BalancesSection extends ConsumerWidget {
         balancesAsync.when(
           loading: () =>
               Center(child: CircularProgressIndicator(color: b.primary)),
-          error: (error, _) => _SmallError(message: 'Error: $error'),
+          error: (error, stack) => buildAsyncError(
+            error,
+            stack,
+            onRetry: () => ref.invalidate(memberBalancesProvider(tenantId)),
+            context: context,
+          ),
           data: (balances) {
             if (balances.isEmpty) {
               return Text(
@@ -501,7 +514,12 @@ class _TransactionsSection extends ConsumerWidget {
             final b = context.bruma;
             return Center(child: CircularProgressIndicator(color: b.primary));
           },
-          error: (error, _) => _SmallError(message: 'Error: $error'),
+          error: (error, stack) => buildAsyncError(
+            error,
+            stack,
+            onRetry: () => ref.invalidate(spaceTransactionsProvider(tenantId)),
+            context: context,
+          ),
           data: (transactions) {
             if (transactions.isEmpty) {
               return const Padding(
@@ -580,7 +598,12 @@ class _MembersSection extends ConsumerWidget {
         membersAsync.when(
           loading: () =>
               Center(child: CircularProgressIndicator(color: b.primary)),
-          error: (error, _) => _SmallError(message: 'Error: $error'),
+          error: (error, stack) => buildAsyncError(
+            error,
+            stack,
+            onRetry: () => ref.invalidate(membersProvider(tenantId)),
+            context: context,
+          ),
           data: (members) => AppCard(
             padding: 12,
             child: Column(
@@ -834,21 +857,6 @@ class _RoleBadge extends StatelessWidget {
           color: isOwner ? b.primary : b.textSecondary,
         ),
       ),
-    );
-  }
-}
-
-class _SmallError extends StatelessWidget {
-  final String message;
-
-  const _SmallError({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final b = context.bruma;
-    return Text(
-      message,
-      style: GoogleFonts.dmSans(fontSize: 13, color: b.textSecondary),
     );
   }
 }

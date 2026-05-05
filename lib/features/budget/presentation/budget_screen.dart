@@ -9,6 +9,7 @@ import '../../../core/animations/bruma_animations.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/amount_input_field.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
 import '../../../core/widgets/category_pill.dart';
 import '../../../core/widgets/transaction_list_item.dart';
@@ -36,7 +37,12 @@ class BudgetScreen extends ConsumerWidget {
           loading: () => Center(
             child: CircularProgressIndicator(color: b.primary),
           ),
-          error: (err, _) => Center(child: Text('Error: $err')),
+          error: (err, stack) => buildAsyncError(
+            err,
+            stack,
+            onRetry: () => ref.invalidate(tenantProvider),
+            context: context,
+          ),
           data: (tenantId) {
             final budgetsAsync = ref.watch(budgetsListProvider(tenantId));
             final spentAsync = ref.watch(spentByCategoryProvider(tenantId));
@@ -109,7 +115,14 @@ class BudgetScreen extends ConsumerWidget {
                           loading: () => Center(
                             child: CircularProgressIndicator(color: b.primary),
                           ),
-                          error: (err, _) => Text('Error: $err'),
+                          error: (err, stack) => buildAsyncError(
+                            err,
+                            stack,
+                            onRetry: () => ref.invalidate(
+                              budgetsListProvider(tenantId),
+                            ),
+                            context: context,
+                          ),
                           data: (budgets) {
                             if (budgets.isEmpty) {
                               return _EmptyBudget(

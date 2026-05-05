@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/widgets/bruma_offline_error.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../bills/providers/bills_provider.dart';
@@ -47,11 +48,12 @@ class UpcomingBills extends ConsumerWidget {
           loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.primary),
           ),
-          error: (error, _) => Padding(
+          error: (error, stack) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Error: $error',
-              style: GoogleFonts.poppins(color: AppColors.textSecondary),
+            child: buildAsyncError(
+              error,
+              stack,
+              onRetry: () => ref.invalidate(upcomingBillsProvider),
             ),
           ),
           data: (bills) {

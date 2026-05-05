@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../core/domain/app_categories.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../features/accounts/data/accounts_repository.dart';
 import '../../../features/dashboard/data/dashboard_repository.dart';
@@ -44,8 +45,11 @@ class _BillCardState extends ConsumerState<BillCard> {
       );
     } catch (error) {
       if (!mounted) return;
+      final message = BrumaOfflineError.isOfflineError(error)
+          ? 'Sin conexión. Intenta marcarlo de nuevo cuando vuelvas a estar en línea.'
+          : 'No se pudo registrar el pago.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(content: Text(message)),
       );
     } finally {
       if (mounted) {

@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/amount_input_field.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
 import '../../../core/widgets/category_pill.dart';
 import '../../../core/widgets/transaction_list_item.dart';
@@ -65,9 +66,11 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
           loading: () => Center(
             child: CircularProgressIndicator(color: b.primary),
           ),
-          error: (error, _) => _TransactionsState(
-            icon: Iconsax.warning_2,
-            message: 'Error: $error',
+          error: (error, stack) => buildAsyncError(
+            error,
+            stack,
+            onRetry: () => ref.invalidate(tenantProvider),
+            context: context,
           ),
           data: (tenantId) {
             final transactionsAsync =
@@ -156,9 +159,13 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
                     loading: () => Center(
                       child: CircularProgressIndicator(color: b.primary),
                     ),
-                    error: (error, _) => _TransactionsState(
-                      icon: Iconsax.warning_2,
-                      message: 'Error: $error',
+                    error: (error, stack) => buildAsyncError(
+                      error,
+                      stack,
+                      onRetry: () => ref.invalidate(
+                        allTransactionsProvider(tenantId),
+                      ),
+                      context: context,
                     ),
                     data: (transactions) {
                       if (transactions.isEmpty) {
@@ -1139,39 +1146,4 @@ class _CategoryOption {
     required this.id,
     required this.label,
   });
-}
-
-class _TransactionsState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const _TransactionsState({
-    required this.icon,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final b = context.bruma;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: b.textTertiary),
-            const SizedBox(height: 10),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                color: b.textTertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

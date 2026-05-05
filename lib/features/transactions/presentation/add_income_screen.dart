@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/tenant_provider.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/amount_input_field.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../accounts/data/accounts_repository.dart';
 import '../../dashboard/data/dashboard_repository.dart';
 import '../../dashboard/domain/account_model.dart';
@@ -107,7 +108,12 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
         child: tenantAsync.when(
           loading: () =>
               Center(child: CircularProgressIndicator(color: b.success)),
-          error: (err, _) => Center(child: Text('Error: $err')),
+          error: (err, stack) => buildAsyncError(
+            err,
+            stack,
+            onRetry: () => ref.invalidate(tenantProvider),
+            context: context,
+          ),
           data: (tenantId) {
             final accountsAsync = ref.watch(accountsProvider(tenantId));
 
@@ -242,10 +248,34 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                                 loading: () => Center(
                                     child: CircularProgressIndicator(
                                         color: b.success, strokeWidth: 2)),
-                                error: (_, __) => Center(
-                                    child: Text('Error',
-                                        style: GoogleFonts.dmSans(
-                                            color: b.textTertiary))),
+                                error: (err, __) {
+                                  if (BrumaOfflineError.isOfflineError(err)) {
+                                    return Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 20,
+                                        ),
+                                        child: Text(
+                                          'Sin conexión — abre la app online al menos una vez\npara guardar tus cuentas en caché.',
+                                          style: GoogleFonts.dmSans(
+                                            fontSize: 12,
+                                            color: b.textTertiary,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return Center(
+                                    child: Text(
+                                      'Error al cargar cuentas',
+                                      style: GoogleFonts.dmSans(
+                                        fontSize: 12,
+                                        color: b.textTertiary,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ],

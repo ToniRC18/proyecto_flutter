@@ -6,6 +6,7 @@ import 'package:iconsax/iconsax.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/animations/bruma_animations.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
 import '../providers/bills_provider.dart';
 import 'bill_card.dart';
@@ -60,10 +61,15 @@ class BillsScreen extends ConsumerWidget {
                   loading: () => Center(
                     child: CircularProgressIndicator(color: b.primary),
                   ),
-                  error: (error, _) => ListView(
+                  error: (error, stack) => ListView(
                     children: [
                       const SizedBox(height: 120),
-                      Center(child: Text('Error: $error')),
+                      buildAsyncError(
+                        error,
+                        stack,
+                        onRetry: () => ref.invalidate(billsProvider),
+                        context: context,
+                      ),
                     ],
                   ),
                   data: (bills) {

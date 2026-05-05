@@ -8,6 +8,7 @@ import '../../../core/supabase/supabase_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/animations/bruma_animations.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../shared_spaces/data/shared_spaces_repository.dart';
 import '../../transactions/domain/transaction_model.dart';
 import '../split/data/split_repository.dart';
@@ -297,28 +298,13 @@ class _SplitSection extends ConsumerWidget {
           ),
         );
       },
-      error: (error, _) => AppCard(
+      error: (error, stack) => AppCard(
         padding: 20,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'División del gasto',
-              style: GoogleFonts.dmSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: b.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'No se pudieron cargar los splits: $error',
-              style: GoogleFonts.dmSans(
-                fontSize: 13,
-                color: b.error,
-              ),
-            ),
-          ],
+        child: buildAsyncError(
+          error,
+          stack,
+          onRetry: () => ref.invalidate(splitsForTransactionProvider(transaction.id)),
+          context: context,
         ),
       ),
       data: (splits) {

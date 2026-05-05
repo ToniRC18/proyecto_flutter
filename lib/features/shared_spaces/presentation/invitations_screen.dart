@@ -9,6 +9,7 @@ import '../../../core/animations/bruma_animations.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
 import '../data/shared_spaces_repository.dart';
 import '../domain/invitation_model.dart';
@@ -42,11 +43,11 @@ class InvitationsScreen extends ConsumerWidget {
       body: invitationsAsync.when(
         loading: () =>
             Center(child: CircularProgressIndicator(color: b.primary)),
-        error: (error, _) => Center(
-          child: Text(
-            'Error: $error',
-            style: GoogleFonts.dmSans(fontSize: 14, color: b.textSecondary),
-          ),
+        error: (error, stack) => buildAsyncError(
+          error,
+          stack,
+          onRetry: () => ref.invalidate(pendingInvitationsProvider),
+          context: context,
         ),
         data: (invitations) {
           if (invitations.isEmpty) {

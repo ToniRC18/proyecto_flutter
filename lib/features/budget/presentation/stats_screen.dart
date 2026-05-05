@@ -16,6 +16,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/balance_display.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
 import '../../../core/widgets/spending_trends_card.dart';
 import '../../../core/widgets/transaction_list_item.dart';
@@ -57,9 +58,11 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           loading: () => Center(
             child: CircularProgressIndicator(color: b.primary),
           ),
-          error: (error, _) => _InlineState(
-            icon: Iconsax.warning_2,
-            message: 'Error: $error',
+          error: (error, stack) => buildAsyncError(
+            error,
+            stack,
+            onRetry: () => ref.invalidate(tenantProvider),
+            context: context,
           ),
           data: (tenantId) {
             final params = (
@@ -559,10 +562,10 @@ class _MonthlySummaryCard extends StatelessWidget {
             child: CircularProgressIndicator(color: b.primary),
           ),
         ),
-        error: (error, _) => _InlineState(
-          icon: Iconsax.warning_2,
-          message: 'Error: $error',
-          compact: true,
+        error: (error, stack) => buildAsyncError(
+          error,
+          stack,
+          context: context,
         ),
         data: (totals) {
           final income = totals['income'] ?? 0;
@@ -616,12 +619,10 @@ class _MonthlySummaryCard extends StatelessWidget {
                     color: b.textSecondary,
                   ),
                 ),
-                error: (error, _) => Text(
-                  'Error: $error',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: b.error,
-                  ),
+                error: (error, stack) => buildAsyncError(
+                  error,
+                  stack,
+                  context: context,
                 ),
                 data: (previousMonthExpenses) {
                   if (previousMonthExpenses <= 0 && expenses <= 0) {
@@ -734,10 +735,10 @@ class _CategoryBreakdownCard extends StatelessWidget {
             child: CircularProgressIndicator(color: b.primary),
           ),
         ),
-        error: (error, _) => _InlineState(
-          icon: Iconsax.warning_2,
-          message: 'Error: $error',
-          compact: true,
+        error: (error, stack) => buildAsyncError(
+          error,
+          stack,
+          context: context,
         ),
         data: (categorySpend) {
           final entries = categorySpend.entries.toList()
@@ -910,47 +911,6 @@ class _TopExpensesSection extends StatelessWidget {
           );
         }),
       ],
-    );
-  }
-}
-
-class _InlineState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-  final bool compact;
-
-  const _InlineState({
-    required this.icon,
-    required this.message,
-    this.compact = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final b = context.bruma;
-    final padding = compact
-        ? const EdgeInsets.symmetric(vertical: 12)
-        : const EdgeInsets.all(24);
-
-    return Center(
-      child: Padding(
-        padding: padding,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: compact ? 32 : 48, color: b.textTertiary),
-            const SizedBox(height: 10),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(
-                fontSize: compact ? 13 : 14,
-                color: b.textTertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

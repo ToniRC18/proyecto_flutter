@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/widgets/bruma_offline_error.dart';
 import '../../../../core/domain/app_categories.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/glass_card.dart';
@@ -35,7 +36,11 @@ class SharedPockets extends ConsumerWidget {
           height: 110,
           child: budgetsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-            error: (err, __) => Center(child: Text('Error: $err')),
+            error: (err, stack) => buildAsyncError(
+              err,
+              stack,
+              onRetry: () => ref.invalidate(budgetsProvider(tenantId)),
+            ),
             data: (budgets) {
               if (budgets.isEmpty) {
                 return Center(

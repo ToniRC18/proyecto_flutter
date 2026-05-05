@@ -10,6 +10,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/providers/tenant_provider.dart';
 import '../../../core/animations/bruma_animations.dart';
 import '../../../core/widgets/balance_display.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/account_card.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/spending_trends_card.dart';
@@ -43,17 +44,12 @@ class DashboardScreen extends ConsumerWidget {
           loading: () => Center(
             child: CircularProgressIndicator(color: b.primary),
           ),
-          error: (err, _) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Iconsax.warning_2, color: b.textTertiary, size: 48),
-                const SizedBox(height: 12),
-                Text(
-                  'Error: $err',
-                  style: GoogleFonts.dmSans(color: b.textTertiary),
-                ),
-              ],
+          error: (err, stack) => Center(
+            child: buildAsyncError(
+              err,
+              stack,
+              onRetry: () => ref.invalidate(tenantProvider),
+              context: context,
             ),
           ),
           data: (tenantId) => ListView(
@@ -593,11 +589,13 @@ class _RecentSection extends ConsumerWidget {
               child: CircularProgressIndicator(color: b.primary),
             ),
           ),
-          error: (err, _) => Padding(
+          error: (err, stack) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              'Error: $err',
-              style: GoogleFonts.dmSans(color: b.textSecondary),
+            child: buildAsyncError(
+              err,
+              stack,
+              onRetry: () => ref.invalidate(recentTransactionsProvider(tenantId)),
+              context: context,
             ),
           ),
           data: (transactions) {

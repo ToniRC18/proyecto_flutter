@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/amount_input_field.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../features/accounts/data/accounts_repository.dart';
 import '../../../features/dashboard/domain/account_model.dart';
 import '../data/bills_repository.dart';
@@ -86,9 +87,11 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
       context.pop();
     } catch (error) {
       if (!mounted) return;
+      final message = BrumaOfflineError.isOfflineError(error)
+          ? 'Sin conexión. Intenta de nuevo cuando vuelvas a estar en línea.'
+          : 'No se pudo crear el pago recurrente.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(content: Text(message)),
       );
     } finally {
       if (mounted) {
@@ -109,7 +112,12 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
           loading: () => Center(
             child: CircularProgressIndicator(color: b.primary),
           ),
-          error: (error, _) => Center(child: Text('Error: $error')),
+          error: (error, stack) => buildAsyncError(
+            error,
+            stack,
+            onRetry: () => ref.invalidate(tenantProvider),
+            context: context,
+          ),
           data: (tenantId) {
             final accountsAsync = ref.watch(allAccountsProvider(tenantId));
 
@@ -301,7 +309,14 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                                 color: b.primary,
                               ),
                             ),
-                            error: (error, _) => Text('Error: $error'),
+                            error: (error, stack) => buildAsyncError(
+                              error,
+                              stack,
+                              onRetry: () => ref.invalidate(
+                                allAccountsProvider(tenantId),
+                              ),
+                              context: context,
+                            ),
                             data: (accounts) {
                               final options = <Account?>[null, ...accounts];
 

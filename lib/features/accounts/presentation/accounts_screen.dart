@@ -8,6 +8,7 @@ import '../../../core/providers/tenant_provider.dart';
 import '../../../core/animations/bruma_animations.dart';
 import '../../../core/widgets/amount_input_field.dart';
 import '../../../core/widgets/balance_display.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/account_card.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../dashboard/domain/account_model.dart';
@@ -34,7 +35,12 @@ class AccountsScreen extends ConsumerWidget {
           loading: () => Center(
             child: CircularProgressIndicator(color: b.primary),
           ),
-          error: (err, _) => Center(child: Text('Error: $err')),
+          error: (err, stack) => buildAsyncError(
+            err,
+            stack,
+            onRetry: () => ref.invalidate(tenantProvider),
+            context: context,
+          ),
           data: (tenantId) {
             final accountsAsync = ref.watch(allAccountsProvider(tenantId));
             final totalAsync = ref.watch(totalBalanceProvider(tenantId));
@@ -122,7 +128,12 @@ class AccountsScreen extends ConsumerWidget {
                       loading: () => Center(
                         child: CircularProgressIndicator(color: b.primary),
                       ),
-                      error: (err, _) => Text('Error: $err'),
+                      error: (err, stack) => buildAsyncError(
+                        err,
+                        stack,
+                        onRetry: () => ref.invalidate(allAccountsProvider(tenantId)),
+                        context: context,
+                      ),
                       data: (accounts) {
                         if (accounts.isEmpty) {
                           return _EmptyAccounts();

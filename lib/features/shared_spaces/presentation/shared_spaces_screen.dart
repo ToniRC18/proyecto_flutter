@@ -11,6 +11,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
 import '../data/shared_spaces_repository.dart';
 import '../domain/shared_member_model.dart';
@@ -70,7 +71,12 @@ class _SharedSpacesScreenState extends ConsumerState<SharedSpacesScreen> {
                 loading: () => Center(
                   child: CircularProgressIndicator(color: b.primary),
                 ),
-                error: (error, _) => _ErrorState(message: 'Error: $error'),
+                error: (error, stack) => buildAsyncError(
+                  error,
+                  stack,
+                  onRetry: () => ref.invalidate(sharedSpacesProvider),
+                  context: context,
+                ),
                 data: (spaces) {
                   if (spaces.isEmpty) {
                     return Center(
@@ -247,30 +253,6 @@ class _PendingInvitationsCard extends StatelessWidget {
           ),
           Icon(Iconsax.arrow_right, color: b.textTertiary, size: 18),
         ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-
-  const _ErrorState({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final b = context.bruma;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.dmSans(
-            fontSize: 14,
-            color: b.textSecondary,
-          ),
-        ),
       ),
     );
   }

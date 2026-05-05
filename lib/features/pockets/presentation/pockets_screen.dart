@@ -13,6 +13,7 @@ import '../../../core/widgets/amount_input_field.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/balance_display.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
 import '../../accounts/data/accounts_repository.dart';
 import '../../dashboard/data/dashboard_repository.dart';
@@ -94,9 +95,11 @@ class PocketsScreen extends ConsumerWidget {
           loading: () => Center(
             child: CircularProgressIndicator(color: b.primary),
           ),
-          error: (error, _) => _PocketsState(
-            icon: Iconsax.warning_2,
-            message: 'Error: $error',
+          error: (error, stack) => buildAsyncError(
+            error,
+            stack,
+            onRetry: () => ref.invalidate(tenantProvider),
+            context: context,
           ),
           data: (tenantId) {
             final pocketsAsync = ref.watch(pocketsProvider(tenantId));
@@ -136,9 +139,11 @@ class PocketsScreen extends ConsumerWidget {
                     loading: () => Center(
                       child: CircularProgressIndicator(color: b.primary),
                     ),
-                    error: (error, _) => _PocketsState(
-                      icon: Iconsax.warning_2,
-                      message: 'Error: $error',
+                    error: (error, stack) => buildAsyncError(
+                      error,
+                      stack,
+                      onRetry: () => ref.invalidate(pocketsProvider(tenantId)),
+                      context: context,
                     ),
                     data: (pockets) {
                       if (pockets.isEmpty) {
@@ -373,9 +378,12 @@ class _PocketContributionSheetState
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
+      final message = BrumaOfflineError.isOfflineError(error)
+          ? 'Sin conexión. Intenta de nuevo cuando vuelvas a estar en línea.'
+          : 'No se pudo crear la meta.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          content: Text(message),
           backgroundColor: b.error,
         ),
       );
@@ -415,11 +423,15 @@ class _PocketContributionSheetState
                   child: CircularProgressIndicator(color: b.primary),
                 ),
               ),
-              error: (error, _) => SizedBox(
+              error: (error, stack) => SizedBox(
                 height: 260,
-                child: _PocketsState(
-                  icon: Iconsax.warning_2,
-                  message: 'Error: $error',
+                child: buildAsyncError(
+                  error,
+                  stack,
+                  onRetry: () => ref.invalidate(
+                    pocketAccountsProvider(widget.tenantId),
+                  ),
+                  context: context,
                 ),
               ),
               data: (accounts) {
@@ -620,9 +632,12 @@ class _CreatePocketSheetState extends ConsumerState<_CreatePocketSheet> {
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
+      final message = BrumaOfflineError.isOfflineError(error)
+          ? 'Sin conexión. Intenta aportar de nuevo cuando vuelvas a estar en línea.'
+          : 'No se pudo registrar el aporte.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          content: Text(message),
           backgroundColor: b.error,
         ),
       );
@@ -875,42 +890,6 @@ class _DashedBorderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _PocketsState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const _PocketsState({
-    required this.icon,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final b = context.bruma;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: b.textTertiary),
-            const SizedBox(height: 10),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                color: b.textTertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 Color _colorFromHex(String hex, Color fallback) {

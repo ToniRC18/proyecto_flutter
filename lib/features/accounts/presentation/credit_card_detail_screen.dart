@@ -12,6 +12,7 @@ import '../../../core/widgets/amount_input_field.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/balance_display.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../dashboard/domain/account_model.dart';
 import '../data/accounts_repository.dart';
 import '../data/credit_card_repository.dart';
@@ -49,11 +50,11 @@ class CreditCardDetailScreen extends ConsumerWidget {
         loading: () => Center(
           child: CircularProgressIndicator(color: b.primary),
         ),
-        error: (error, _) => Center(
-          child: Text(
-            'Error: $error',
-            style: GoogleFonts.dmSans(color: b.textSecondary),
-          ),
+        error: (error, stack) => buildAsyncError(
+          error,
+          stack,
+          onRetry: () => ref.invalidate(allAccountsProvider(account.tenantId)),
+          context: context,
         ),
         data: (accounts) {
           final currentAccount = accounts.firstWhere(
@@ -99,11 +100,13 @@ class CreditCardDetailScreen extends ConsumerWidget {
                     child: CircularProgressIndicator(color: b.primary),
                   ),
                 ),
-                error: (error, _) => Padding(
+                error: (error, stack) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'Error: $error',
-                    style: GoogleFonts.dmSans(color: b.textSecondary),
+                  child: buildAsyncError(
+                    error,
+                    stack,
+                    onRetry: () => ref.invalidate(msiPlansProvider(currentAccount.id)),
+                    context: context,
                   ),
                 ),
                 data: (plans) {

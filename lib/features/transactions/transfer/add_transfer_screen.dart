@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/amount_input_field.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../dashboard/domain/account_model.dart';
 import 'transfer_provider.dart';
 import 'transfer_repository.dart';
@@ -50,8 +51,11 @@ class _AddTransferScreenState extends ConsumerState<AddTransferScreen> {
       }
     } catch (error) {
       if (!mounted) return;
+      final message = BrumaOfflineError.isOfflineError(error)
+          ? 'Sin conexión. Intenta seleccionar la fecha de nuevo cuando tengas red.'
+          : 'No se pudo abrir el selector de fecha.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al seleccionar la fecha: $error')),
+        SnackBar(content: Text(message)),
       );
     }
   }
@@ -101,9 +105,11 @@ class _AddTransferScreenState extends ConsumerState<AddTransferScreen> {
       context.pop();
     } catch (error) {
       if (!mounted) return;
+      final message = BrumaOfflineError.isOfflineError(error)
+          ? 'Sin conexión. La transferencia no se pudo enviar en este momento.'
+          : 'No se pudo registrar la transferencia.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(content: Text(message)),
       );
     }
   }
@@ -122,7 +128,12 @@ class _AddTransferScreenState extends ConsumerState<AddTransferScreen> {
           loading: () => Center(
             child: CircularProgressIndicator(color: b.primary),
           ),
-          error: (error, _) => Center(child: Text('Error: $error')),
+          error: (error, stack) => buildAsyncError(
+            error,
+            stack,
+            onRetry: () => ref.invalidate(tenantProvider),
+            context: context,
+          ),
           data: (tenantId) {
             final accountsAsync = ref.watch(transferAccountsProvider(tenantId));
 
@@ -130,7 +141,12 @@ class _AddTransferScreenState extends ConsumerState<AddTransferScreen> {
               loading: () => Center(
                 child: CircularProgressIndicator(color: b.primary),
               ),
-              error: (error, _) => Center(child: Text('Error: $error')),
+              error: (error, stack) => buildAsyncError(
+                error,
+                stack,
+                onRetry: () => ref.invalidate(transferAccountsProvider(tenantId)),
+                context: context,
+              ),
               data: (accounts) {
                 _syncSelectedAccounts(accounts);
 

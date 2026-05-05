@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/tenant_provider.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/amount_input_field.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../accounts/data/accounts_repository.dart';
 import '../../dashboard/data/dashboard_repository.dart';
 import '../../dashboard/domain/account_model.dart';
@@ -151,7 +152,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         child: activeTenantAsync.when(
           loading: () =>
               Center(child: CircularProgressIndicator(color: b.primary)),
-          error: (err, __) => Center(child: Text('Error: $err')),
+          error: (err, stack) => buildAsyncError(
+            err,
+            stack,
+            onRetry: () => ref.invalidate(activeTenantProvider),
+            context: context,
+          ),
           data: (activeTenant) {
             final accountsAsync = ref.watch(accountsProvider(activeTenant.id));
             final amountValue = AmountInputField.parseAmount(_amountCtrl.text);
@@ -355,9 +361,32 @@ class _AccountSelector extends StatelessWidget {
             loading: () => Center(
                 child: CircularProgressIndicator(
                     color: b.primary, strokeWidth: 2)),
-            error: (_, __) => Center(
-                child: Text('Error',
-                    style: GoogleFonts.dmSans(color: b.textTertiary))),
+            error: (err, __) {
+              if (BrumaOfflineError.isOfflineError(err)) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'Sin conexión — abre la app online al menos una vez\npara guardar tus cuentas en caché.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: b.textTertiary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
+              return Center(
+                child: Text(
+                  'Error al cargar cuentas',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: b.textTertiary,
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],

@@ -8,6 +8,7 @@ import '../../features/budget/data/budget_repository.dart';
 import '../domain/app_categories.dart';
 import '../theme/app_theme.dart';
 import 'app_card.dart';
+import 'bruma_offline_error.dart';
 
 class SpendingTrendsCard extends StatelessWidget {
   final AsyncValue<List<SpendingTrend>> trendsAsync;
@@ -36,7 +37,11 @@ class SpendingTrendsCard extends StatelessWidget {
             child: CircularProgressIndicator(color: b.primary),
           ),
         ),
-        error: (error, _) => _TrendsInlineState(message: 'Error: $error'),
+        error: (error, stack) => buildAsyncError(
+          error,
+          stack,
+          context: context,
+        ),
         data: (trends) {
           if (trends.isEmpty) {
             return _TrendsInlineState(message: emptyMessage);

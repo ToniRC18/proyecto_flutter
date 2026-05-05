@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/bruma_offline_error.dart';
 import '../../../core/widgets/account_card.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
@@ -44,11 +45,11 @@ class AccountDetailScreen extends ConsumerWidget {
         loading: () => Center(
           child: CircularProgressIndicator(color: b.primary),
         ),
-        error: (error, _) => Center(
-          child: Text(
-            'Error: $error',
-            style: GoogleFonts.dmSans(color: b.textSecondary),
-          ),
+        error: (error, stack) => buildAsyncError(
+          error,
+          stack,
+          onRetry: () => ref.invalidate(allAccountsProvider(account.tenantId)),
+          context: context,
         ),
         data: (accounts) {
           final currentAccount = accounts.firstWhere(
