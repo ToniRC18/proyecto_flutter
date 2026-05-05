@@ -18,6 +18,7 @@ class AppButton extends StatefulWidget {
   final bool small;
   final AppButtonVariant variant;
   final Widget? icon;
+  final bool destructive;
 
   const AppButton({
     super.key,
@@ -28,6 +29,7 @@ class AppButton extends StatefulWidget {
     this.small = false,
     this.variant = AppButtonVariant.primary,
     this.icon,
+    this.destructive = false,
   });
 
   @override
@@ -53,29 +55,31 @@ class _AppButtonState extends State<AppButton> {
         border = null;
       case AppButtonVariant.ghost:
         bgColor = Colors.transparent;
-        fgColor = b.textSecondary;
-        border = Border.all(color: b.border, width: 1);
+        fgColor = widget.destructive ? b.error : b.textSecondary;
+        border = Border.all(
+          color:
+              widget.destructive ? b.error.withValues(alpha: 0.35) : b.border,
+          width: 1,
+        );
       case AppButtonVariant.subtle:
-        bgColor = b.primarySubtle;
-        fgColor = b.primary;
+        bgColor = widget.destructive
+            ? b.error.withValues(alpha: 0.10)
+            : b.primarySubtle;
+        fgColor = widget.destructive ? b.error : b.primary;
         border = null;
     }
 
     final disabled = widget.onPressed == null && !widget.loading;
 
     return GestureDetector(
-      onTapDown: !disabled
-          ? (_) => setState(() => _pressed = true)
-          : null,
+      onTapDown: !disabled ? (_) => setState(() => _pressed = true) : null,
       onTapUp: !disabled
           ? (_) {
               setState(() => _pressed = false);
               if (!widget.loading) widget.onPressed?.call();
             }
           : null,
-      onTapCancel: !disabled
-          ? () => setState(() => _pressed = false)
-          : null,
+      onTapCancel: !disabled ? () => setState(() => _pressed = false) : null,
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 120),
@@ -105,9 +109,8 @@ class _AppButtonState extends State<AppButton> {
                       ),
                     )
                   : Row(
-                      mainAxisSize: widget.expanded
-                          ? MainAxisSize.max
-                          : MainAxisSize.min,
+                      mainAxisSize:
+                          widget.expanded ? MainAxisSize.max : MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         if (widget.icon != null) ...[

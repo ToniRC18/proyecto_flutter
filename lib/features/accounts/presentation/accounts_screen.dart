@@ -271,12 +271,7 @@ class _TappableAccountCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
-      onTap: account.isCreditCard
-          ? () => context.push(
-                AppRoutes.creditCardDetail,
-                extra: account,
-              )
-          : null,
+      onTap: () => _openAccountDetail(context, account),
       onLongPress: () => _showOptions(context, ref),
       child: AccountCard(
         name: account.name,
@@ -290,6 +285,7 @@ class _TappableAccountCard extends ConsumerWidget {
   void _showOptions(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (_) => _AccountOptionsDialog(
         account: account,
         onDeleted: onDeleted,
@@ -297,6 +293,15 @@ class _TappableAccountCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+void _openAccountDetail(BuildContext context, Account account) {
+  context.push(
+    account.isCreditCard
+        ? AppRoutes.creditCardDetail
+        : AppRoutes.accountDetail,
+    extra: account,
+  );
 }
 
 // ── Account Options Dialog ──────────────────────────────────────────────────
@@ -456,6 +461,7 @@ class _AddAccountButton extends ConsumerWidget {
       onTap: () {
         showDialog(
           context: context,
+          barrierDismissible: false,
           builder: (_) => _AddAccountDialog(
             tenantId: tenantId,
             onCreated: onCreated,
@@ -604,166 +610,173 @@ class _AddAccountDialogState extends ConsumerState<_AddAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final b = context.bruma;
+    final maxDialogHeight = MediaQuery.of(context).size.height * 0.85;
 
     return Dialog(
       backgroundColor: b.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Nueva Cuenta',
-              style: GoogleFonts.dmSans(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: b.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _nameCtrl,
-              style: GoogleFonts.dmSans(color: b.textPrimary),
-              decoration: InputDecoration(
-                labelText: 'Nombre de la cuenta',
-                labelStyle: GoogleFonts.dmSans(color: b.textSecondary),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_selectedType != 'credit_card') ...[
-              AmountInputField(
-                controller: _balanceCtrl,
-                autofocus: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxDialogHeight),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Nueva Cuenta',
+                style: GoogleFonts.dmSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: b.textPrimary,
+                ),
               ),
               const SizedBox(height: 16),
-            ],
-            Text(
-              'Tipo de cuenta',
-              style: GoogleFonts.dmSans(
-                fontSize: 13,
-                color: b.textSecondary,
+              TextField(
+                controller: _nameCtrl,
+                style: GoogleFonts.dmSans(color: b.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Nombre de la cuenta',
+                  labelStyle: GoogleFonts.dmSans(color: b.textSecondary),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: _types.map((t) {
-                final (value, label) = t;
-                final selected = _selectedType == value;
-                final typeColor = kAccountTypeColors[value] ?? b.primary;
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedType = value),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? typeColor.withValues(alpha: 0.12)
-                          : b.surfaceAlt,
-                      border: Border.all(
-                        color: selected
-                            ? typeColor.withValues(alpha: 0.25)
-                            : b.border,
-                      ),
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                    child: Text(
-                      label,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
-                        color: selected ? typeColor : b.textSecondary,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeInOut,
-              child: _selectedType == 'credit_card'
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: Column(
-                        children: [
-                          AmountInputField(
-                            controller: _creditLimitCtrl,
-                            autofocus: false,
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _billingCloseDayCtrl,
-                            keyboardType: TextInputType.number,
-                            style: GoogleFonts.dmSans(color: b.textPrimary),
-                            decoration: InputDecoration(
-                              labelText: 'Día de corte',
-                              labelStyle:
-                                  GoogleFonts.dmSans(color: b.textSecondary),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _paymentDueDayCtrl,
-                            keyboardType: TextInputType.number,
-                            style: GoogleFonts.dmSans(color: b.textPrimary),
-                            decoration: InputDecoration(
-                              labelText: 'Día límite de pago',
-                              labelStyle:
-                                  GoogleFonts.dmSans(color: b.textSecondary),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(
-                    'Cancelar',
-                    style: GoogleFonts.dmSans(color: b.textSecondary),
-                  ),
+              const SizedBox(height: 12),
+              if (_selectedType != 'credit_card') ...[
+                AmountInputField(
+                  controller: _balanceCtrl,
+                  autofocus: false,
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _loading ? null : _create,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: b.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _loading
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            color: b.onPrimary,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Text('Crear', style: GoogleFonts.dmSans()),
-                ),
+                const SizedBox(height: 16),
               ],
-            ),
-          ],
+              Text(
+                'Tipo de cuenta',
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  color: b.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: _types.map((t) {
+                  final (value, label) = t;
+                  final selected = _selectedType == value;
+                  final typeColor = kAccountTypeColors[value] ?? b.primary;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedType = value),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? typeColor.withValues(alpha: 0.12)
+                            : b.surfaceAlt,
+                        border: Border.all(
+                          color: selected
+                              ? typeColor.withValues(alpha: 0.25)
+                              : b.border,
+                        ),
+                        borderRadius: BorderRadius.circular(100),
+                      ),
+                      child: Text(
+                        label,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.w400,
+                          color: selected ? typeColor : b.textSecondary,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeInOut,
+                child: _selectedType == 'credit_card'
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Column(
+                          children: [
+                            AmountInputField(
+                              controller: _creditLimitCtrl,
+                              autofocus: false,
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _billingCloseDayCtrl,
+                              keyboardType: TextInputType.number,
+                              style: GoogleFonts.dmSans(color: b.textPrimary),
+                              decoration: InputDecoration(
+                                labelText: 'Día de corte',
+                                labelStyle:
+                                    GoogleFonts.dmSans(color: b.textSecondary),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _paymentDueDayCtrl,
+                              keyboardType: TextInputType.number,
+                              style: GoogleFonts.dmSans(color: b.textPrimary),
+                              decoration: InputDecoration(
+                                labelText: 'Día límite de pago',
+                                labelStyle:
+                                    GoogleFonts.dmSans(color: b.textSecondary),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancelar',
+                      style: GoogleFonts.dmSans(color: b.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _loading ? null : _create,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: b.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _loading
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              color: b.onPrimary,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text('Crear', style: GoogleFonts.dmSans()),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

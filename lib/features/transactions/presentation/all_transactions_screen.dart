@@ -246,7 +246,8 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
         if (isFrom) {
           _filterDateFrom = DateTime(picked.year, picked.month, picked.day);
         } else {
-          _filterDateTo = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
+          _filterDateTo =
+              DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
         }
       });
     } catch (error) {
@@ -283,10 +284,10 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
           notes.contains(query) ||
           categoryLabel.contains(query);
       final matchesType = _filterType == null || tx.type == _filterType;
-      final matchesCategory = _filterCategory == null ||
-          normalizedCategory == _filterCategory;
-      final matchesFrom = _filterDateFrom == null ||
-          !tx.date.isBefore(_filterDateFrom!);
+      final matchesCategory =
+          _filterCategory == null || normalizedCategory == _filterCategory;
+      final matchesFrom =
+          _filterDateFrom == null || !tx.date.isBefore(_filterDateFrom!);
       final matchesTo =
           _filterDateTo == null || !tx.date.isAfter(_filterDateTo!);
 
@@ -513,10 +514,11 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
     ref.invalidate(weeklySpendByDayProvider(tenantId));
     ref.invalidate(budgetsProvider(tenantId));
     ref.invalidate(spentByCategoryProvider(tenantId));
-    ref.invalidate(monthlySpendByCategoryProvider);
-    ref.invalidate(monthlyTotalsProvider);
-    ref.invalidate(topExpensesProvider);
-    ref.invalidate(previousMonthExpensesProvider);
+    ref.invalidate(statsSpendByCategoryProvider);
+    ref.invalidate(statsTotalsProvider);
+    ref.invalidate(statsTopExpensesProvider);
+    ref.invalidate(statsPreviousExpensesProvider);
+    ref.invalidate(statsTrendsProvider);
   }
 }
 
@@ -545,11 +547,13 @@ class _SearchField extends StatelessWidget {
           fontSize: 14,
           color: b.textTertiary,
         ),
-        prefixIcon: Icon(Iconsax.search_normal, color: b.textSecondary, size: 18),
+        prefixIcon:
+            Icon(Iconsax.search_normal, color: b.textSecondary, size: 18),
         suffixIcon: controller.text.isNotEmpty
             ? IconButton(
                 onPressed: onClear,
-                icon: Icon(Iconsax.close_circle, color: b.textTertiary, size: 18),
+                icon:
+                    Icon(Iconsax.close_circle, color: b.textTertiary, size: 18),
               )
             : null,
         filled: true,
@@ -691,7 +695,8 @@ class _FiltersPanel extends StatelessWidget {
                 child: _DateFilterButton(
                   label: filterDateFrom == null
                       ? 'Desde'
-                      : DateFormat('dd MMM yyyy', 'es_MX').format(filterDateFrom!),
+                      : DateFormat('dd MMM yyyy', 'es_MX')
+                          .format(filterDateFrom!),
                   onTap: onPickFromDate,
                 ),
               ),
@@ -700,7 +705,8 @@ class _FiltersPanel extends StatelessWidget {
                 child: _DateFilterButton(
                   label: filterDateTo == null
                       ? 'Hasta'
-                      : DateFormat('dd MMM yyyy', 'es_MX').format(filterDateTo!),
+                      : DateFormat('dd MMM yyyy', 'es_MX')
+                          .format(filterDateTo!),
                   onTap: onPickToDate,
                 ),
               ),
@@ -1098,12 +1104,12 @@ class _EditTransactionSheetState extends ConsumerState<_EditTransactionSheet> {
     setState(() => _saving = true);
     try {
       await ref.read(updateTransactionProvider)(
-            id: widget.transaction.id,
-            notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-            category: _selectedCategory,
-            amount: amount,
-            date: _selectedDate,
-          );
+        id: widget.transaction.id,
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        category: _selectedCategory,
+        amount: amount,
+        date: _selectedDate,
+      );
 
       widget.onSaved();
       if (!mounted) return;

@@ -96,6 +96,18 @@ class NotificationService {
     await const NotificationService().initialize();
   }
 
+  static Future<void> syncTokenForCurrentUser() async {
+    await _registrarTokenFCM();
+  }
+
+  static Future<void> clearPushTokenForCurrentUser() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      await Supabase.instance.client.from('push_tokens').delete().eq('user_id', userId);
+    } catch (_) {}
+  }
+
   // ─── Helpers privados ────────────────────────────────────────────────────
 
   /// Configura el canal de Android y la inicialización del plugin local.
@@ -153,16 +165,33 @@ class NotificationService {
   /// Obtiene el token FCM y lo guarda (o actualiza) en la tabla push_tokens.
   static Future<void> _registrarTokenFCM() async {
     try {
-      // En iOS/macOS se necesita el token APNS primero
+      String? token;
+
       if (Platform.isIOS || Platform.isMacOS) {
-        await FirebaseMessaging.instance.getAPNSToken();
+        // En iOS el APNS token puede tardar — reintenta hasta 3 veces
+        String? apnsToken;
+        for (int i = 0; i < 3; i++) {
+          apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+          if (apnsToken != null) break;
+          await Future.delayed(const Duration(seconds: 2));
+        }
+        // Si después de 3 intentos no hay APNS token, loguea y continúa
+        if (apnsToken == null) {
+          print('[FCM] APNS token no disponible después de 3 intentos');
+        }
       }
-      final token = await FirebaseMessaging.instance.getToken();
+
+      // Intenta obtener el FCM token independientemente del APNS
+      token = await FirebaseMessaging.instance.getToken();
+
       if (token != null) {
+        print('[FCM] Token obtenido: ${token.substring(0, 20)}...');
         await _guardarTokenEnSupabase(token);
+      } else {
+        print('[FCM] FCM token es null');
       }
     } catch (e) {
-      // Silenciar errores en el registro del token para no bloquear el inicio
+      print('[FCM] Error registrando token: $e');
     }
   }
 
@@ -196,8 +225,8 @@ class NotificationService {
           'platform': plataforma,
         });
       }
-    } catch (_) {
-      // Silenciar errores para no bloquear el flujo de autenticación
+    } catch (e) {
+      print('[FCM] Error guardando token en Supabase: $e');
     }
   }
 

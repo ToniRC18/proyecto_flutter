@@ -28,8 +28,7 @@ class CreditCardDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final b = context.bruma;
-    final plansAsync = ref.watch(msiPlansProvider(account.id));
-    final totalMonthlyAsync = ref.watch(totalMonthlyMsiProvider(account.id));
+    final accountsAsync = ref.watch(allAccountsProvider(account.tenantId));
 
     return Scaffold(
       backgroundColor: b.bg,
@@ -46,123 +45,153 @@ class CreditCardDetailScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-        children: [
-          _CreditCardOverviewCard(account: account),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Compras a meses',
-                style: GoogleFonts.dmSans(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: b.textPrimary,
-                  letterSpacing: -0.02 * 17,
-                ),
-              ),
-              AppButton(
-                label: '+ Agregar',
-                expanded: false,
-                small: true,
-                variant: AppButtonVariant.subtle,
-                onPressed: () => _showAddMsiSheet(context, ref),
-              ),
-            ],
+      body: accountsAsync.when(
+        loading: () => Center(
+          child: CircularProgressIndicator(color: b.primary),
+        ),
+        error: (error, _) => Center(
+          child: Text(
+            'Error: $error',
+            style: GoogleFonts.dmSans(color: b.textSecondary),
           ),
-          const SizedBox(height: 16),
-          plansAsync.when(
-            loading: () => Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: CircularProgressIndicator(color: b.primary),
+        ),
+        data: (accounts) {
+          final currentAccount = accounts.firstWhere(
+            (item) => item.id == account.id,
+            orElse: () => account,
+          );
+          final plansAsync = ref.watch(msiPlansProvider(currentAccount.id));
+          final totalMonthlyAsync =
+              ref.watch(totalMonthlyMsiProvider(currentAccount.id));
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+            children: [
+              _CreditCardOverviewCard(account: currentAccount),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Compras a meses',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: b.textPrimary,
+                      letterSpacing: -0.02 * 17,
+                    ),
+                  ),
+                  AppButton(
+                    label: '+ Agregar',
+                    expanded: false,
+                    small: true,
+                    variant: AppButtonVariant.subtle,
+                    onPressed: () =>
+                        _showAddMsiSheet(context, ref, currentAccount),
+                  ),
+                ],
               ),
-            ),
-            error: (error, _) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                'Error: $error',
-                style: GoogleFonts.dmSans(color: b.textSecondary),
+              const SizedBox(height: 16),
+              plansAsync.when(
+                loading: () => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: CircularProgressIndicator(color: b.primary),
+                  ),
+                ),
+                error: (error, _) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'Error: $error',
+                    style: GoogleFonts.dmSans(color: b.textSecondary),
+                  ),
+                ),
+                data: (plans) {
+                  if (plans.isEmpty) {
+                    return AppCard(
+                      padding: 24,
+                      child: Column(
+                        children: [
+                          Icon(
+                            Iconsax.card_tick,
+                            color: b.textTertiary,
+                            size: 36,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Sin compras a meses',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 14,
+                              color: b.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    children: plans
+                        .map((plan) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _MsiPlanCard(
+                                account: currentAccount,
+                                plan: plan,
+                              ),
+                            ))
+                        .toList(),
+                  );
+                },
               ),
-            ),
-            data: (plans) {
-              if (plans.isEmpty) {
-                return AppCard(
-                  padding: 24,
-                  child: Column(
+              const SizedBox(height: 4),
+              totalMonthlyAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (total) => AppCard(
+                  padding: 18,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Iconsax.card_tick, color: b.textTertiary, size: 36),
-                      const SizedBox(height: 12),
                       Text(
-                        'Sin compras a meses',
+                        'Total MSI este mes:',
                         style: GoogleFonts.dmSans(
                           fontSize: 14,
-                          color: b.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          color: b.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        _formatCurrency(total),
+                        style: GoogleFonts.dmSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: b.primary,
                         ),
                       ),
                     ],
                   ),
-                );
-              }
-
-              return Column(
-                children: plans
-                    .map((plan) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _MsiPlanCard(
-                            account: account,
-                            plan: plan,
-                          ),
-                        ))
-                    .toList(),
-              );
-            },
-          ),
-          const SizedBox(height: 4),
-          totalMonthlyAsync.when(
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-            data: (total) => AppCard(
-              padding: 18,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Total MSI este mes:',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: b.textPrimary,
-                    ),
-                  ),
-                  Text(
-                    _formatCurrency(total),
-                    style: GoogleFonts.dmSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: b.primary,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
 
-  Future<void> _showAddMsiSheet(BuildContext context, WidgetRef ref) async {
+  Future<void> _showAddMsiSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Account currentAccount,
+  ) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AddMsiPlanSheet(account: account),
+      builder: (_) => _AddMsiPlanSheet(account: currentAccount),
     );
-    ref.invalidate(msiPlansProvider(account.id));
-    ref.invalidate(totalMonthlyMsiProvider(account.id));
+    ref.invalidate(msiPlansProvider(currentAccount.id));
+    ref.invalidate(totalMonthlyMsiProvider(currentAccount.id));
   }
 }
 

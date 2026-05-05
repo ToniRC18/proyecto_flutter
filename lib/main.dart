@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'core/notifications/notification_handler.dart';
+import 'core/onboarding/onboarding_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'core/notifications/notification_service.dart';
@@ -56,6 +58,8 @@ void main() async {
   // Esto genera lib/firebase_options.dart con las credenciales correctas.
   await const NotificationService().initialize();
 
+  await onboardingService.init();
+
   // Configuración de la barra de estado
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -87,12 +91,27 @@ class BrumaApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es'),
+        Locale('es', 'MX'),
+        Locale('en'),
+      ],
+      locale: const Locale('es', 'MX'),
       routerConfig: appRouter,
       builder: (context, child) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           NotificationHandler.handlePendingNavigation();
         });
-        return child ?? const SizedBox.shrink();
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: child ?? const SizedBox.shrink(),
+        );
       },
     );
   }

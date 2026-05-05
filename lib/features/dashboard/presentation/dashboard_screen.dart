@@ -12,8 +12,10 @@ import '../../../core/animations/bruma_animations.dart';
 import '../../../core/widgets/balance_display.dart';
 import '../../../core/widgets/account_card.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/spending_trends_card.dart';
 import '../../../core/widgets/weekly_chart.dart';
 import '../../../core/widgets/transaction_list_item.dart';
+import '../../budget/data/budget_repository.dart';
 import '../data/dashboard_repository.dart';
 import '../domain/account_model.dart';
 import '../../accounts/data/accounts_repository.dart';
@@ -159,6 +161,15 @@ class DashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 28),
 
+              FadeUpAnimation(
+                delayMs: 350,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _TrendsSection(tenantId: tenantId),
+                ),
+              ),
+              const SizedBox(height: 28),
+
               // ── Recientes ────────────────────────────────────────
               FadeUpAnimation(
                 delayMs: 400,
@@ -292,6 +303,7 @@ class _AccountsSection extends ConsumerWidget {
                     type: acc.type,
                     balance: acc.balance,
                     compact: true,
+                    onTap: () => _openDashboardAccountDetail(context, acc),
                   );
                 },
               );
@@ -301,6 +313,13 @@ class _AccountsSection extends ConsumerWidget {
       ],
     );
   }
+}
+
+void _openDashboardAccountDetail(BuildContext context, Account account) {
+  context.push(
+    account.isCreditCard ? AppRoutes.creditCardDetail : AppRoutes.accountDetail,
+    extra: account,
+  );
 }
 
 // ── Gastos esta semana (WeeklyChart dentro de AppCard) ────────────────────────
@@ -362,6 +381,32 @@ class _WeeklySection extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TrendsSection extends ConsumerWidget {
+  final String tenantId;
+
+  const _TrendsSection({required this.tenantId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = DateTime.now();
+    final range = BudgetStatsRange(
+      start: DateTime(now.year, now.month, 1),
+      end: DateTime(now.year, now.month + 1, 1),
+    );
+    final trendsAsync = ref.watch(
+      statsTrendsProvider((tenantId: tenantId, range: range)),
+    );
+
+    return SpendingTrendsCard(
+      trendsAsync: trendsAsync,
+      title: 'Tendencias del mes',
+      subtitle: 'Cómo cambió tu gasto frente al mes pasado',
+      emptyMessage:
+          'Aún no hay suficiente historial para mostrar tendencias de este mes.',
     );
   }
 }

@@ -36,6 +36,51 @@ class Budget {
   }
 }
 
+class BudgetStatsRange {
+  final DateTime start;
+  final DateTime end;
+
+  const BudgetStatsRange({
+    required this.start,
+    required this.end,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is BudgetStatsRange &&
+        other.start == start &&
+        other.end == end;
+  }
+
+  @override
+  int get hashCode => Object.hash(start, end);
+}
+
+class SpendingTrend {
+  final String category;
+  final double currentAmount;
+  final double previousAmount;
+
+  const SpendingTrend({
+    required this.category,
+    required this.currentAmount,
+    required this.previousAmount,
+  });
+
+  double get deltaAmount => currentAmount - previousAmount;
+  double get deltaPercent {
+    if (previousAmount <= 0) {
+      return currentAmount > 0 ? 100 : 0;
+    }
+    return (deltaAmount / previousAmount) * 100;
+  }
+
+  bool get increased => deltaAmount > 0;
+  bool get decreased => deltaAmount < 0;
+  bool get hasChange => deltaAmount.abs() > 0.009;
+}
+
 /// Repositorio para gestión de presupuestos.
 class BudgetRepository {
   final SupabaseClient _client;
@@ -95,15 +140,12 @@ class BudgetRepository {
     return result;
   }
 
-  /// Obtiene el total gastado por categoría para un mes específico.
-  Future<Map<String, double>> getMonthlySpendByCategory(
+  /// Obtiene el total gastado por categoría para un rango específico.
+  Future<Map<String, double>> getSpendByCategoryForRange(
     String tenantId,
-    int year,
-    int month,
+    DateTime start,
+    DateTime end,
   ) async {
-    final start = DateTime(year, month, 1);
-    final end = DateTime(year, month + 1, 1);
-
     final raw = await _client
         .from('transactions')
         .select('category, amount')
@@ -121,15 +163,12 @@ class BudgetRepository {
     return result;
   }
 
-  /// Obtiene los totales de ingresos y gastos para un mes específico.
-  Future<Map<String, double>> getMonthlyTotals(
+  /// Obtiene los totales de ingresos y gastos para un rango específico.
+  Future<Map<String, double>> getTotalsForRange(
     String tenantId,
-    int year,
-    int month,
+    DateTime start,
+    DateTime end,
   ) async {
-    final start = DateTime(year, month, 1);
-    final end = DateTime(year, month + 1, 1);
-
     final raw = await _client
         .from('transactions')
         .select('type, amount')
@@ -156,16 +195,13 @@ class BudgetRepository {
     };
   }
 
-  /// Obtiene los gastos más grandes de un mes específico.
-  Future<List<Transaction>> getTopExpenses(
+  /// Obtiene los gastos más grandes de un rango específico.
+  Future<List<Transaction>> getTopExpensesForRange(
     String tenantId,
-    int year,
-    int month, {
+    DateTime start,
+    DateTime end, {
     int limit = 5,
   }) async {
-    final start = DateTime(year, month, 1);
-    final end = DateTime(year, month + 1, 1);
-
     final raw = await _client
         .from('transactions')
         .select()
@@ -181,27 +217,66 @@ class BudgetRepository {
         .toList();
   }
 
-  /// Obtiene el total de gastos del mes previo al mes de referencia.
-  Future<double> getPreviousMonthExpenses(
+  /// Obtiene el total de gastos del rango previo al rango de referencia.
+  Future<double> getPreviousRangeExpenses(
     String tenantId, {
-    required int year,
-    required int month,
+    required DateTime start,
+    required DateTime end,
   }) async {
-    final previousMonth = DateTime(year, month - 1, 1);
-    final start = DateTime(previousMonth.year, previousMonth.month, 1);
-    final end = DateTime(previousMonth.year, previousMonth.month + 1, 1);
-
+    final previousRange = _previousRange(start, end);
     final raw = await _client
         .from('transactions')
         .select('amount')
         .eq('tenant_id', tenantId)
         .eq('type', 'expense')
-        .gte('date', start.toIso8601String())
-        .lt('date', end.toIso8601String());
+        .gte('date', previousRange.start.toIso8601String())
+        .lt('date', previousRange.end.toIso8601String());
 
     return (raw as List).fold<double>(
       0,
       (sum, row) => sum + (row['amount'] as num).toDouble(),
+    );
+  }
+
+  Future<List<SpendingTrend>> getSpendingTrendsForRange(
+    String tenantId, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final previousRange = _previousRange(start, end);
+    final currentSpend = await getSpendByCategoryForRange(tenantId, start, end);
+    final previousSpend = await getSpendByCategoryForRange(
+      tenantId,
+      previousRange.start,
+      previousRange.end,
+    );
+
+    final categories = <String>{
+      ...currentSpend.keys,
+      ...previousSpend.keys,
+    };
+
+    final trends = categories
+        .map(
+          (category) => SpendingTrend(
+            category: category,
+            currentAmount: currentSpend[category] ?? 0,
+            previousAmount: previousSpend[category] ?? 0,
+          ),
+        )
+        .where((trend) => trend.currentAmount > 0 || trend.previousAmount > 0)
+        .where((trend) => trend.hasChange)
+        .toList()
+      ..sort((a, b) => b.deltaAmount.abs().compareTo(a.deltaAmount.abs()));
+
+    return trends;
+  }
+
+  BudgetStatsRange _previousRange(DateTime start, DateTime end) {
+    final duration = end.difference(start);
+    return BudgetStatsRange(
+      start: start.subtract(duration),
+      end: end.subtract(duration),
     );
   }
 }
@@ -224,46 +299,57 @@ final spentByCategoryProvider =
   },
 );
 
-final monthlySpendByCategoryProvider = FutureProvider.autoDispose
-    .family<Map<String, double>, ({String tenantId, int year, int month})>(
+final statsSpendByCategoryProvider = FutureProvider.autoDispose
+    .family<Map<String, double>, ({String tenantId, BudgetStatsRange range})>(
   (ref, params) {
-    return ref.watch(budgetRepositoryProvider).getMonthlySpendByCategory(
+    return ref.watch(budgetRepositoryProvider).getSpendByCategoryForRange(
           params.tenantId,
-          params.year,
-          params.month,
+          params.range.start,
+          params.range.end,
         );
   },
 );
 
-final monthlyTotalsProvider = FutureProvider.autoDispose
-    .family<Map<String, double>, ({String tenantId, int year, int month})>(
+final statsTotalsProvider = FutureProvider.autoDispose
+    .family<Map<String, double>, ({String tenantId, BudgetStatsRange range})>(
   (ref, params) {
-    return ref.watch(budgetRepositoryProvider).getMonthlyTotals(
+    return ref.watch(budgetRepositoryProvider).getTotalsForRange(
           params.tenantId,
-          params.year,
-          params.month,
+          params.range.start,
+          params.range.end,
         );
   },
 );
 
-final topExpensesProvider = FutureProvider.autoDispose
-    .family<List<Transaction>, ({String tenantId, int year, int month})>(
+final statsTopExpensesProvider = FutureProvider.autoDispose
+    .family<List<Transaction>, ({String tenantId, BudgetStatsRange range})>(
   (ref, params) {
-    return ref.watch(budgetRepositoryProvider).getTopExpenses(
+    return ref.watch(budgetRepositoryProvider).getTopExpensesForRange(
           params.tenantId,
-          params.year,
-          params.month,
+          params.range.start,
+          params.range.end,
         );
   },
 );
 
-final previousMonthExpensesProvider =
-    FutureProvider.autoDispose.family<double, ({String tenantId, int year, int month})>(
+final statsPreviousExpensesProvider = FutureProvider.autoDispose
+    .family<double, ({String tenantId, BudgetStatsRange range})>(
   (ref, params) {
-    return ref.watch(budgetRepositoryProvider).getPreviousMonthExpenses(
+    return ref.watch(budgetRepositoryProvider).getPreviousRangeExpenses(
           params.tenantId,
-          year: params.year,
-          month: params.month,
+          start: params.range.start,
+          end: params.range.end,
+        );
+  },
+);
+
+final statsTrendsProvider = FutureProvider.autoDispose
+    .family<List<SpendingTrend>, ({String tenantId, BudgetStatsRange range})>(
+  (ref, params) {
+    return ref.watch(budgetRepositoryProvider).getSpendingTrendsForRange(
+          params.tenantId,
+          start: params.range.start,
+          end: params.range.end,
         );
   },
 );

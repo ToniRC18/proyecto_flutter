@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/animations/bruma_animations.dart';
+import '../../../core/notifications/notification_service.dart';
 import '../../../core/providers/tenant_provider.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
@@ -256,8 +257,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       await prefs.setBool(_notificationsKey, value);
       await FirebaseMessaging.instance.setAutoInitEnabled(value);
       if (value) {
-        await FirebaseMessaging.instance.getToken();
+        await NotificationService.syncTokenForCurrentUser();
       } else {
+        await NotificationService.clearPushTokenForCurrentUser();
         await FirebaseMessaging.instance.deleteToken();
       }
 
@@ -285,6 +287,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       final shouldSave = await showDialog<bool>(
         context: context,
+        barrierDismissible: false,
         builder: (_) => AlertDialog(
           backgroundColor: b.surface,
           shape: RoundedRectangleBorder(

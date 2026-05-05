@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:intl/intl.dart';
 import '../../../core/domain/app_categories.dart';
+import '../../../core/supabase/supabase_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/animations/bruma_animations.dart';
 import '../../../core/widgets/app_card.dart';
@@ -16,9 +17,108 @@ import 'widgets/comments_section.dart';
 
 /// Pantalla de detalle de una transacción.
 /// Muestra información completa del gasto + sección de comentarios en tiempo real.
-class TransactionDetailScreen extends ConsumerWidget {
+class TransactionDetailScreen extends ConsumerStatefulWidget {
+  final Transaction? transaction;
+  final String? transactionId;
+
+  const TransactionDetailScreen({
+    super.key,
+    this.transaction,
+    this.transactionId,
+  }) : assert(
+         transaction != null || transactionId != null,
+         'Se requiere transaction o transactionId',
+       );
+
+  @override
+  ConsumerState<TransactionDetailScreen> createState() =>
+      _TransactionDetailScreenState();
+}
+
+class _TransactionDetailScreenState
+    extends ConsumerState<TransactionDetailScreen> {
+  Transaction? _transaction;
+  Object? _loadError;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _transaction = widget.transaction;
+    if (_transaction == null && widget.transactionId != null) {
+      _loadTransactionById(widget.transactionId!);
+    }
+  }
+
+  Future<void> _loadTransactionById(String id) async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+
+    try {
+      final tx = await supabase
+          .from('transactions')
+          .select('*, accounts(name, type)')
+          .eq('id', id)
+          .single();
+
+      if (!mounted) return;
+      setState(() {
+        _transaction = Transaction.fromJson(tx);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final transaction = _transaction;
+    if (_loading && transaction == null) {
+      return Scaffold(
+        backgroundColor: context.bruma.bg,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_loadError != null && transaction == null) {
+      return Scaffold(
+        backgroundColor: context.bruma.bg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'No se pudo cargar la transacción: $_loadError',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (transaction == null) {
+      return Scaffold(
+        backgroundColor: context.bruma.bg,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return _TransactionDetailContent(transaction: transaction);
+  }
+}
+
+class _TransactionDetailContent extends ConsumerWidget {
   final Transaction transaction;
-  const TransactionDetailScreen({super.key, required this.transaction});
+
+  const _TransactionDetailContent({required this.transaction});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

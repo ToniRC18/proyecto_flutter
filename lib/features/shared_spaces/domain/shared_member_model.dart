@@ -3,8 +3,8 @@ class SharedMember {
   final String userId;
   final String name;
   final String? avatarUrl;
-  final String role;         // 'owner' | 'member'
-  final double totalSpent;  // calculado al cargar
+  final String role; // 'owner' | 'member'
+  final double totalSpent; // calculado al cargar
 
   const SharedMember({
     required this.userId,
@@ -14,7 +14,8 @@ class SharedMember {
     required this.totalSpent,
   });
 
-  factory SharedMember.fromJson(Map<String, dynamic> json, {double totalSpent = 0}) {
+  factory SharedMember.fromJson(Map<String, dynamic> json,
+      {double totalSpent = 0}) {
     final profile = json['profiles'] as Map<String, dynamic>?;
     return SharedMember(
       userId: json['user_id'] as String,
@@ -24,6 +25,25 @@ class SharedMember {
       totalSpent: totalSpent,
     );
   }
+}
+
+/// Balance calculado por miembro dentro de un espacio compartido.
+class MemberBalance {
+  final String userId;
+  final String name;
+  final String? avatarUrl;
+  final double totalPaid;
+  final double totalOwed;
+  final double netBalance;
+
+  const MemberBalance({
+    required this.userId,
+    required this.name,
+    this.avatarUrl,
+    required this.totalPaid,
+    required this.totalOwed,
+    required this.netBalance,
+  });
 }
 
 /// Modelo ligero de un tenant compartido (para listas).

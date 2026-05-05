@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/notifications/notification_service.dart';
+import '../../../core/onboarding/onboarding_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/animations/bruma_animations.dart';
 import '../../../core/widgets/app_input_field.dart';
@@ -55,7 +57,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       } else {
         await repo.signUp(email, password, name);
       }
-      // GoRouter redirige automáticamente al dashboard al detectar la sesión
+      // Sincroniza estado de onboarding desde Supabase ahora que hay sesión.
+      await onboardingService.syncFromServer();
+      await NotificationService.syncTokenForCurrentUser();
+      // GoRouter redirige automáticamente: dashboard u onboarding.
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -201,9 +206,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
                             // Botón principal
                             AppButton(
-                              label: _isLogin
-                                  ? 'Iniciar sesión'
-                                  : 'Crear cuenta',
+                              label:
+                                  _isLogin ? 'Iniciar sesión' : 'Crear cuenta',
                               onPressed: _submit,
                               loading: _isLoading,
                             ),
@@ -291,9 +295,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             ),
                           ),
                           TextSpan(
-                            text: _isLogin
-                                ? 'Regístrate'
-                                : 'Inicia sesión',
+                            text: _isLogin ? 'Regístrate' : 'Inicia sesión',
                             style: GoogleFonts.dmSans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,

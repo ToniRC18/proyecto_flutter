@@ -32,11 +32,15 @@ class MonthlyReportService {
     final start = DateTime(year, month, 1);
     final end = DateTime(year, month + 1, 1);
 
-    final totals = await _budgetRepository.getMonthlyTotals(tenantId, year, month);
-    final categorySpend = await _budgetRepository.getMonthlySpendByCategory(
+    final totals = await _budgetRepository.getTotalsForRange(
       tenantId,
-      year,
-      month,
+      start,
+      end,
+    );
+    final categorySpend = await _budgetRepository.getSpendByCategoryForRange(
+      tenantId,
+      start,
+      end,
     );
     final rawTransactions = await _client
         .from('transactions')
@@ -191,9 +195,7 @@ class MonthlyReportService {
                 vertical: 8,
               ),
               decoration: pw.BoxDecoration(
-                color: isEven
-                    ? _pdfColor(theme.surfaceAlt)
-                    : PdfColors.white,
+                color: isEven ? _pdfColor(theme.surfaceAlt) : PdfColors.white,
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
               ),
               margin: const pw.EdgeInsets.only(bottom: 6),

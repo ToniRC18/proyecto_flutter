@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../domain/app_categories.dart';
 import '../../features/auth/presentation/auth_screen.dart';
-import '../../features/accounts/presentation/accounts_screen.dart';
+import '../../features/accounts/presentation/account_detail_screen.dart';
 import '../../features/accounts/presentation/credit_card_detail_screen.dart';
 import '../../features/budget/presentation/budget_screen.dart';
 import '../../features/budget/presentation/stats_screen.dart';
@@ -18,9 +18,13 @@ import '../../features/transactions/presentation/transaction_detail_screen.dart'
 import '../../features/transactions/presentation/widgets/category_selector.dart';
 import '../../features/transactions/domain/transaction_model.dart';
 import '../../features/pockets/presentation/pockets_screen.dart';
+import '../../features/shared_spaces/presentation/invitations_screen.dart';
+import '../../features/shared_spaces/presentation/space_detail_screen.dart';
 import '../../features/shared_spaces/presentation/shared_spaces_screen.dart';
 import '../navigation/main_shell.dart';
+import '../onboarding/onboarding_service.dart';
 import '../supabase/supabase_client.dart';
+import '../../features/onboarding/presentation/onboarding_flow.dart';
 import 'app_routes.dart';
 import 'error_screen.dart';
 
@@ -48,13 +52,36 @@ final appRouter = GoRouter(
   initialLocation: AppRoutes.auth,
   debugLogDiagnostics: true,
   navigatorKey: rootNavigatorKey,
-  refreshListenable: _GoRouterRefreshStream(supabase.auth.onAuthStateChange),
+  refreshListenable: Listenable.merge([
+    _GoRouterRefreshStream(supabase.auth.onAuthStateChange),
+    onboardingService,
+  ]),
   redirect: (context, state) {
     final session = supabase.auth.currentSession;
-    final onAuth = state.matchedLocation == AppRoutes.auth;
+    final loc = state.matchedLocation;
+    final onAuth = loc == AppRoutes.auth;
+    final onOnboarding = loc == AppRoutes.onboarding;
 
+    // Sin sesión, fuerza auth.
     if (session == null && !onAuth) return AppRoutes.auth;
-    if (session != null && onAuth) return AppRoutes.dashboard;
+
+    // Con sesión en auth, decide por estado de onboarding.
+    if (session != null && onAuth) {
+      return onboardingService.isCompleted
+          ? AppRoutes.dashboard
+          : AppRoutes.onboarding;
+    }
+
+    // Con sesión y onboarding pendiente, no deja entrar al producto.
+    if (session != null && !onboardingService.isCompleted && !onOnboarding) {
+      return AppRoutes.onboarding;
+    }
+
+    // Con sesión y onboarding completo, evita repetir el flujo.
+    if (session != null && onboardingService.isCompleted && onOnboarding) {
+      return AppRoutes.dashboard;
+    }
+
     return null;
   },
   errorBuilder: (context, state) => ErrorScreen(error: state.error),
@@ -64,6 +91,11 @@ final appRouter = GoRouter(
       path: AppRoutes.auth,
       name: AppRoutes.authName,
       builder: (context, state) => const AuthScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.onboarding,
+      name: AppRoutes.onboardingName,
+      builder: (context, state) => const OnboardingFlow(),
     ),
 
     // ── Shell principal con bottom nav (IndexedStack) ──────────────────────
@@ -85,7 +117,16 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.accounts,
       name: AppRoutes.accountsName,
-      builder: (context, state) => const AccountsScreen(),
+      builder: (context, state) => const MainShell(initialIndex: 1),
+    ),
+    GoRoute(
+      path: AppRoutes.accountDetail,
+      name: AppRoutes.accountDetailName,
+      builder: (context, state) {
+        final account = state.extra as Account?;
+        if (account == null) return const ErrorScreen(error: null);
+        return AccountDetailScreen(account: account);
+      },
     ),
 
     // ── Pantallas modales (se apilan sobre la navbar) ──────────────────────
@@ -129,6 +170,20 @@ final appRouter = GoRouter(
       builder: (context, state) => const SharedSpacesScreen(),
     ),
     GoRoute(
+      path: AppRoutes.spaceDetail,
+      name: AppRoutes.spaceDetailName,
+      builder: (context, state) {
+        final tenantId = state.extra as String?;
+        if (tenantId == null) return const ErrorScreen(error: null);
+        return SpaceDetailScreen(tenantId: tenantId);
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.invitations,
+      name: AppRoutes.invitationsName,
+      builder: (context, state) => const InvitationsScreen(),
+    ),
+    GoRoute(
       path: AppRoutes.transactions,
       name: AppRoutes.transactionsName,
       builder: (context, state) => const AllTransactionsScreen(),
@@ -138,8 +193,14 @@ final appRouter = GoRouter(
       name: AppRoutes.transactionDetailName,
       builder: (context, state) {
         final transaction = state.extra as Transaction?;
-        if (transaction == null) return const ErrorScreen(error: null);
-        return TransactionDetailScreen(transaction: transaction);
+        final transactionId = state.uri.queryParameters['id'];
+        if (transaction != null) {
+          return TransactionDetailScreen(transaction: transaction);
+        }
+        if (transactionId != null && transactionId.isNotEmpty) {
+          return TransactionDetailScreen(transactionId: transactionId);
+        }
+        return const ErrorScreen(error: null);
       },
     ),
     GoRoute(

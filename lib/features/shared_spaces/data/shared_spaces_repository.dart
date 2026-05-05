@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../core/supabase/supabase_client.dart' as sc;
+import '../../transactions/domain/transaction_model.dart';
 import '../domain/invitation_model.dart';
 import '../domain/shared_member_model.dart';
 
-/// Repositorio de Espacios Compartidos.
-/// Gestiona tenants de tipo 'shared', miembros e invitaciones.
+/// Repositorio de espacios compartidos.
+/// Gestiona tenants shared, miembros, invitaciones, balances y movimientos.
 class SharedSpacesRepository {
   final SupabaseClient _client;
 
@@ -14,157 +16,280 @@ class SharedSpacesRepository {
   // ─── Espacios ────────────────────────────────────────────────────────────
 
   /// Crea un nuevo espacio compartido.
-  /// Llama a una función RPC en Supabase que maneja la creación del tenant 
-  /// y la asignación del miembro en una sola transacción.
   Future<void> createSharedSpace(String name) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw Exception('No hay usuario autenticado');
 
-    // Usar función SQL que maneja todo en una transacción
     await _client.rpc('create_shared_space', params: {'space_name': name});
   }
 
-  /// Obtiene todos los espacios compartidos donde el usuario es miembro.
+  /// Obtiene todos los espacios shared del usuario evitando el N+1 principal.
   Future<List<SharedTenant>> getSharedSpaces() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw Exception('No hay usuario autenticado');
 
-    // Obtener tenant_ids del usuario en tenants de tipo 'shared'
-    final memberships = await _client
+    final data = await _client
         .from('tenant_members')
-        .select('tenant_id')
-        .eq('user_id', userId);
+        .select('tenant_id, tenants!inner(id, name, type)')
+        .eq('user_id', userId)
+        .eq('tenants.type', 'shared');
 
-    final tenantIds = (memberships as List)
-        .map((m) => m['tenant_id'] as String)
-        .toList();
+    final memberships = (data as List).cast<Map<String, dynamic>>();
+    if (memberships.isEmpty) return [];
 
-    if (tenantIds.isEmpty) return [];
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1).toIso8601String();
 
-    // Filtrar solo los de tipo 'shared'
-    final tenantsRaw = await _client
-        .from('tenants')
-        .select('id, name')
-        .eq('type', 'shared')
-        .inFilter('id', tenantIds);
+    final spaces = await Future.wait(memberships.map((membership) async {
+      final tenant = membership['tenants'] as Map<String, dynamic>;
+      final tenantId = tenant['id'] as String;
 
-    final List<SharedTenant> result = [];
-    for (final t in tenantsRaw as List) {
-      final tid = t['id'] as String;
+      final results = await Future.wait([
+        _client
+            .from('tenant_members')
+            .select('user_id')
+            .eq('tenant_id', tenantId),
+        _client
+            .from('transactions')
+            .select('amount')
+            .eq('tenant_id', tenantId)
+            .eq('type', 'expense')
+            .gte('date', startOfMonth),
+      ]);
 
-      // Contar miembros
-      final membersCount = await _client
-          .from('tenant_members')
-          .select('id')
-          .eq('tenant_id', tid);
+      final members = (results[0] as List);
+      final transactions = (results[1] as List);
+      final totalThisMonth = transactions.fold<double>(
+        0,
+        (sum, item) =>
+            sum + ((item as Map<String, dynamic>)['amount'] as num).toDouble(),
+      );
 
-      // Suma de gastos este mes
-      final now = DateTime.now();
-      final startOfMonth = DateTime(now.year, now.month, 1).toIso8601String();
-      final txRaw = await _client
-          .from('transactions')
-          .select('amount')
-          .eq('tenant_id', tid)
-          .eq('type', 'expense')
-          .gte('date', startOfMonth);
+      return SharedTenant(
+        id: tenantId,
+        name: tenant['name'] as String,
+        memberCount: members.length,
+        totalThisMonth: totalThisMonth,
+      );
+    }));
 
-      double total = 0;
-      for (final tx in txRaw as List) {
-        total += (tx['amount'] as num).toDouble();
-      }
-
-      result.add(SharedTenant(
-        id: tid,
-        name: t['name'] as String,
-        memberCount: (membersCount as List).length,
-        totalThisMonth: total,
-      ));
-    }
-
-    return result;
+    return spaces;
   }
 
-  // ─── Miembros ────────────────────────────────────────────────────────────
+  Future<SharedTenant> getSharedSpace(String tenantId) async {
+    final tenant = await _client
+        .from('tenants')
+        .select('id, name')
+        .eq('id', tenantId)
+        .single();
+    final members = await _client
+        .from('tenant_members')
+        .select('user_id')
+        .eq('tenant_id', tenantId);
+    final totalThisMonth = await _monthExpenses(tenantId);
 
-  /// Obtiene la lista de miembros de un espacio con su total gastado.
+    return SharedTenant(
+      id: tenant['id'] as String,
+      name: tenant['name'] as String,
+      memberCount: (members as List).length,
+      totalThisMonth: totalThisMonth,
+    );
+  }
+
+  Future<double> _monthExpenses(String tenantId) async {
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1).toIso8601String();
+    final raw = await _client
+        .from('transactions')
+        .select('amount')
+        .eq('tenant_id', tenantId)
+        .eq('type', 'expense')
+        .gte('date', startOfMonth);
+
+    return (raw as List).fold<double>(
+      0,
+      (sum, item) =>
+          sum + ((item as Map<String, dynamic>)['amount'] as num).toDouble(),
+    );
+  }
+
+  // ─── Movimientos ─────────────────────────────────────────────────────────
+
+  Future<List<Transaction>> getSpaceTransactions(
+    String tenantId, {
+    int limit = 30,
+  }) async {
+    final raw = await _client
+        .from('transactions')
+        .select()
+        .eq('tenant_id', tenantId)
+        .order('date', ascending: false)
+        .limit(limit);
+
+    return (raw as List)
+        .map((json) => Transaction.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  // ─── Miembros y balances ─────────────────────────────────────────────────
+
   Future<List<SharedMember>> getMembers(String tenantId) async {
-    // JOIN tenant_members + profiles
     final rawMembers = await _client
         .from('tenant_members')
         .select('user_id, role, profiles(name, avatar_url)')
         .eq('tenant_id', tenantId);
 
-    // Calcular total gastado por cada miembro en este tenant
-    final members = <SharedMember>[];
-
-    for (final m in (rawMembers as List)) {
-      final txRaw = await _client
-          .from('transactions')
-          .select('amount')
-          .eq('tenant_id', tenantId)
-          .eq('type', 'expense');
-
-      // Filtrar por usuario desde accounts (aproximación: suma por account del usuario)
-      double totalSpent = 0;
-      for (final tx in txRaw as List) {
-        totalSpent += (tx['amount'] as num).toDouble();
-      }
-
-      members.add(SharedMember.fromJson(m, totalSpent: totalSpent));
-    }
-
-    return members;
+    return (rawMembers as List)
+        .map((json) => SharedMember.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
-  /// Calcula el balance de gastos entre miembros de un tenant.
-  /// Retorna un mapa {userId → totalGastado}.
+  Future<List<MemberBalance>> getMemberBalances(String tenantId) async {
+    final members = await getMembers(tenantId);
+    if (members.isEmpty) return [];
+
+    final currentUserId = _client.auth.currentUser?.id;
+
+    final balances = await Future.wait(members.map((member) async {
+      final owed = await _memberUnsettledOwed(tenantId, member.userId);
+
+      // En el esquema real no hay payer_id/creditor_id; solo user_id del split.
+      // Para la vista se modela al usuario actual como acreedor de splits ajenos.
+      final paid = member.userId == currentUserId
+          ? await _othersUnsettledOwed(tenantId, member.userId)
+          : 0.0;
+
+      return MemberBalance(
+        userId: member.userId,
+        name: member.name,
+        avatarUrl: member.avatarUrl,
+        totalPaid: paid,
+        totalOwed: owed,
+        netBalance: paid - owed,
+      );
+    }));
+
+    return balances;
+  }
+
+  Future<double> _memberUnsettledOwed(String tenantId, String userId) async {
+    final transactionIds = await _transactionIdsForTenant(tenantId);
+    if (transactionIds.isEmpty) return 0;
+
+    final raw = await _client
+        .from('transaction_splits')
+        .select('amount')
+        .eq('user_id', userId)
+        .eq('is_settled', false)
+        .inFilter('transaction_id', transactionIds);
+
+    return (raw as List).fold<double>(
+      0,
+      (sum, item) =>
+          sum + ((item as Map<String, dynamic>)['amount'] as num).toDouble(),
+    );
+  }
+
+  Future<double> _othersUnsettledOwed(String tenantId, String userId) async {
+    final transactionIds = await _transactionIdsForTenant(tenantId);
+    if (transactionIds.isEmpty) return 0;
+
+    final raw = await _client
+        .from('transaction_splits')
+        .select('amount, user_id')
+        .eq('is_settled', false)
+        .inFilter('transaction_id', transactionIds);
+
+    return (raw as List).fold<double>(0, (sum, item) {
+      final row = item as Map<String, dynamic>;
+      if (row['user_id'] == userId) return sum;
+      return sum + (row['amount'] as num).toDouble();
+    });
+  }
+
   Future<Map<String, double>> getBalanceBetweenMembers(String tenantId) async {
-    final membersRaw = await _client
-        .from('tenant_members')
-        .select('user_id')
+    final balances = await getMemberBalances(tenantId);
+    return {
+      for (final balance in balances) balance.userId: balance.netBalance,
+    };
+  }
+
+  Future<void> settleBalance({
+    required String tenantId,
+    required String debtorId,
+    required String creditorId,
+    required double amount,
+  }) async {
+    try {
+      final currentUserId = _client.auth.currentUser?.id;
+      if (currentUserId == null) {
+        throw Exception('No autenticado');
+      }
+
+      // Solo el deudor o el acreedor pueden saldar esta deuda.
+      if (currentUserId != debtorId && currentUserId != creditorId) {
+        throw Exception('No tienes permiso para saldar esta deuda');
+      }
+
+      final transactionIds = await _transactionIdsForTenant(tenantId);
+      if (transactionIds.isEmpty) return;
+
+      await _client
+          .from('transaction_splits')
+          .update({
+            'is_settled': true,
+            'settled_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', debtorId)
+          .eq('is_settled', false)
+          .inFilter('transaction_id', transactionIds);
+
+      final accountId = await _firstAccountId(tenantId);
+      if (accountId == null) return;
+
+      await _client.from('transactions').insert({
+        'tenant_id': tenantId,
+        'type': 'income',
+        'amount': amount,
+        'category': 'settlement',
+        'notes': 'Saldo liquidado',
+        'date': DateTime.now().toIso8601String(),
+        'account_id': accountId,
+      });
+    } catch (_) {
+      rethrow;
+    }
+  }
+
+  Future<List<String>> _transactionIdsForTenant(String tenantId) async {
+    final raw = await _client
+        .from('transactions')
+        .select('id')
         .eq('tenant_id', tenantId);
 
-    final Map<String, double> balance = {};
+    return (raw as List)
+        .map((item) => (item as Map<String, dynamic>)['id'] as String)
+        .toList();
+  }
 
-    for (final m in (membersRaw as List)) {
-      final uid = m['user_id'] as String;
-      // Obtener las cuentas del usuario en este tenant
-      final accounts = await _client
-          .from('accounts')
-          .select('id')
-          .eq('tenant_id', tenantId);
+  Future<String?> _firstAccountId(String tenantId) async {
+    final raw = await _client
+        .from('accounts')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .limit(1);
 
-      final accountIds = (accounts as List).map((a) => a['id'] as String).toList();
-      if (accountIds.isEmpty) {
-        balance[uid] = 0;
-        continue;
-      }
-
-      double total = 0;
-      for (final aid in accountIds) {
-        final txRaw = await _client
-            .from('transactions')
-            .select('amount')
-            .eq('account_id', aid)
-            .eq('type', 'expense');
-        for (final tx in txRaw as List) {
-          total += (tx['amount'] as num).toDouble();
-        }
-      }
-      balance[uid] = total;
-    }
-
-    return balance;
+    final accounts = (raw as List).cast<Map<String, dynamic>>();
+    if (accounts.isEmpty) return null;
+    return accounts.first['id'] as String?;
   }
 
   // ─── Invitaciones ────────────────────────────────────────────────────────
 
-  /// Invita a un miembro por email al espacio compartido.
   Future<void> inviteMember(String tenantId, String email) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw Exception('No hay usuario autenticado');
 
-    // Verificar que el email no sea ya miembro
     final existing = await _client
         .from('tenant_invitations')
         .select('id')
@@ -177,19 +302,14 @@ class SharedSpacesRepository {
       throw Exception('Ya existe una invitación pendiente para $email');
     }
 
-    // Insertar la invitación
     await _client.from('tenant_invitations').insert({
       'tenant_id': tenantId,
       'invited_by': userId,
       'invited_email': email,
       'status': 'pending',
     });
-
-    // Nota: la notificación push se enviaría desde una Edge Function de Supabase
-    // o desde el backend, ya que el cliente no tiene acceso al token del destinatario.
   }
 
-  /// Obtiene las invitaciones pendientes recibidas por el usuario autenticado.
   Future<List<TenantInvitation>> getPendingInvitations() async {
     final userEmail = _client.auth.currentUser?.email;
     if (userEmail == null) throw Exception('No hay usuario autenticado');
@@ -209,12 +329,10 @@ class SharedSpacesRepository {
         .toList();
   }
 
-  /// Acepta una invitación por token y agrega al usuario como miembro.
   Future<void> acceptInvitation(String invitationId) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw Exception('No hay usuario autenticado');
 
-    // Obtener la invitación
     final invitation = await _client
         .from('tenant_invitations')
         .select('tenant_id')
@@ -223,13 +341,10 @@ class SharedSpacesRepository {
 
     final tenantId = invitation['tenant_id'] as String;
 
-    // Actualizar estado
     await _client
         .from('tenant_invitations')
-        .update({'status': 'accepted'})
-        .eq('id', invitationId);
+        .update({'status': 'accepted'}).eq('id', invitationId);
 
-    // Agregar al usuario como miembro
     await _client.from('tenant_members').insert({
       'tenant_id': tenantId,
       'user_id': userId,
@@ -237,16 +352,14 @@ class SharedSpacesRepository {
     });
   }
 
-  /// Rechaza una invitación.
   Future<void> rejectInvitation(String invitationId) async {
     await _client
         .from('tenant_invitations')
-        .update({'status': 'rejected'})
-        .eq('id', invitationId);
+        .update({'status': 'rejected'}).eq('id', invitationId);
   }
 }
 
-// ─── Providers ───────────────────────────────────────────────────────────────
+// ─── Providers ─────────────────────────────────────────────────────────────
 
 final sharedSpacesRepositoryProvider = Provider<SharedSpacesRepository>((ref) {
   return SharedSpacesRepository(sc.supabase);
@@ -255,6 +368,11 @@ final sharedSpacesRepositoryProvider = Provider<SharedSpacesRepository>((ref) {
 final sharedSpacesProvider =
     FutureProvider.autoDispose<List<SharedTenant>>((ref) async {
   return ref.watch(sharedSpacesRepositoryProvider).getSharedSpaces();
+});
+
+final sharedSpaceProvider =
+    FutureProvider.autoDispose.family<SharedTenant, String>((ref, tenantId) {
+  return ref.watch(sharedSpacesRepositoryProvider).getSharedSpace(tenantId);
 });
 
 final pendingInvitationsProvider =
@@ -266,6 +384,24 @@ final membersProvider =
     FutureProvider.autoDispose.family<List<SharedMember>, String>(
   (ref, tenantId) async {
     return ref.watch(sharedSpacesRepositoryProvider).getMembers(tenantId);
+  },
+);
+
+final memberBalancesProvider =
+    FutureProvider.autoDispose.family<List<MemberBalance>, String>(
+  (ref, tenantId) async {
+    return ref
+        .watch(sharedSpacesRepositoryProvider)
+        .getMemberBalances(tenantId);
+  },
+);
+
+final spaceTransactionsProvider =
+    FutureProvider.autoDispose.family<List<Transaction>, String>(
+  (ref, tenantId) async {
+    return ref
+        .watch(sharedSpacesRepositoryProvider)
+        .getSpaceTransactions(tenantId, limit: 15);
   },
 );
 

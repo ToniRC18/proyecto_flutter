@@ -35,7 +35,7 @@ class AppBottomNavBar extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: b.surface.withOpacity(0.88),
+              color: b.surface.withValues(alpha: 0.88),
               border: Border(
                 top: BorderSide(color: b.border, width: 1),
               ),
@@ -51,6 +51,7 @@ class AppBottomNavBar extends StatelessWidget {
                 // Tab 0: Home
                 _NavTab(
                   icon: Iconsax.home_2,
+                  label: 'Inicio',
                   index: 0,
                   currentIndex: currentIndex,
                   onTap: onTap,
@@ -58,7 +59,8 @@ class AppBottomNavBar extends StatelessWidget {
                 ),
                 // Tab 1: Accounts
                 _NavTab(
-                  icon: Iconsax.wallet_2,
+                  icon: Iconsax.wallet,
+                  label: 'Cuentas',
                   index: 1,
                   currentIndex: currentIndex,
                   onTap: onTap,
@@ -66,17 +68,19 @@ class AppBottomNavBar extends StatelessWidget {
                 ),
                 // FAB central
                 _CenterFab(tokens: b),
-                // Tab 2: Stats (internamente índice 3)
+                // Tab 3: Espacios
                 _NavTab(
-                  icon: Iconsax.chart_square,
+                  icon: Iconsax.people,
+                  label: 'Espacios',
                   index: 3,
                   currentIndex: currentIndex,
                   onTap: onTap,
                   tokens: b,
                 ),
-                // Tab 3: Profile (internamente índice 4)
+                // Tab 4: Profile
                 _NavTab(
-                  icon: Iconsax.profile_circle,
+                  icon: Iconsax.user,
+                  label: 'Perfil',
                   index: 4,
                   currentIndex: currentIndex,
                   onTap: onTap,
@@ -96,6 +100,7 @@ class AppBottomNavBar extends StatelessWidget {
 
 class _NavTab extends StatelessWidget {
   final IconData icon;
+  final String label;
   final int index;
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -104,6 +109,7 @@ class _NavTab extends StatelessWidget {
 
   const _NavTab({
     required this.icon,
+    required this.label,
     required this.index,
     required this.currentIndex,
     required this.onTap,
@@ -145,7 +151,16 @@ class _NavTab extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.dmSans(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: isActive ? tokens.primary : tokens.textTertiary,
+              ),
+            ),
+            const SizedBox(height: 3),
             // Dot indicator
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -200,7 +215,7 @@ class _CenterFabState extends State<_CenterFab> {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: t.primary.withOpacity(0.3),
+                color: t.primary.withValues(alpha: 0.3),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -343,9 +358,9 @@ class _OptionRow extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.15), width: 1),
+          border: Border.all(color: color.withValues(alpha: 0.15), width: 1),
         ),
         child: Row(
           children: [
@@ -353,7 +368,7 @@ class _OptionRow extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 18),

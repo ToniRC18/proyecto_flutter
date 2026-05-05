@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/tenant_provider.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/amount_input_field.dart';
+import '../../accounts/data/accounts_repository.dart';
 import '../../dashboard/data/dashboard_repository.dart';
 import '../../dashboard/domain/account_model.dart';
 import '../data/transaction_repository.dart';
@@ -75,7 +76,10 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                 _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
           );
 
-      // Invalidar providers para refrescar datos del dashboard y accounts
+      // Refresca tanto métricas globales como listas de cuentas individuales.
+      ref.invalidate(accountsProvider(tenantId));
+      ref.invalidate(allAccountsProvider(tenantId));
+      ref.invalidate(totalBalanceProvider(tenantId));
       ref.invalidate(availableBalanceProvider(tenantId));
       ref.invalidate(weeklySpendProvider(tenantId));
       ref.invalidate(recentTransactionsProvider(tenantId));

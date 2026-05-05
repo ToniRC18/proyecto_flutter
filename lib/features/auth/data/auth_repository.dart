@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/notifications/notification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/onboarding/onboarding_service.dart';
 import '../../../core/supabase/supabase_client.dart';
 
 class AuthRepository {
@@ -30,7 +33,11 @@ class AuthRepository {
 
   /// Cierre de sesión
   Future<void> signOut() async {
+    await NotificationService.clearPushTokenForCurrentUser();
     await supabase.auth.signOut();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('onboarding_completed');
+    await onboardingService.reset();
   }
 
   /// Usuario autenticado actual (null si no hay sesión)

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +17,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/balance_display.dart';
 import '../../../core/widgets/bruma_empty_state.dart';
+import '../../../core/widgets/spending_trends_card.dart';
 import '../../../core/widgets/transaction_list_item.dart';
 import '../../transactions/domain/transaction_model.dart';
 import '../data/budget_repository.dart';
@@ -26,21 +29,26 @@ class StatsScreen extends ConsumerStatefulWidget {
   ConsumerState<StatsScreen> createState() => _StatsScreenState();
 }
 
+enum _StatsPeriod { day, week, month, year }
+
 class _StatsScreenState extends ConsumerState<StatsScreen> {
-  late DateTime _selectedMonth;
+  late DateTime _selectedDate;
+  _StatsPeriod _selectedPeriod = _StatsPeriod.month;
+  DateTimeRange? _selectedWeekRange;
   bool _isExporting = false;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _selectedMonth = DateTime(now.year, now.month, 1);
+    _selectedDate = DateTime(now.year, now.month, now.day);
   }
 
   @override
   Widget build(BuildContext context) {
     final b = context.bruma;
     final tenantAsync = ref.watch(tenantProvider);
+    final range = _rangeFor(_selectedPeriod, _selectedDate, _selectedWeekRange);
 
     return Scaffold(
       backgroundColor: b.bg,
@@ -56,16 +64,17 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           data: (tenantId) {
             final params = (
               tenantId: tenantId,
-              year: _selectedMonth.year,
-              month: _selectedMonth.month,
+              range: range,
             );
 
-            final monthlyTotalsAsync = ref.watch(monthlyTotalsProvider(params));
+            final monthlyTotalsAsync = ref.watch(statsTotalsProvider(params));
             final categorySpendAsync =
-                ref.watch(monthlySpendByCategoryProvider(params));
-            final topExpensesAsync = ref.watch(topExpensesProvider(params));
+                ref.watch(statsSpendByCategoryProvider(params));
+            final topExpensesAsync =
+                ref.watch(statsTopExpensesProvider(params));
             final previousMonthAsync =
-                ref.watch(previousMonthExpensesProvider(params));
+                ref.watch(statsPreviousExpensesProvider(params));
+            final trendsAsync = ref.watch(statsTrendsProvider(params));
 
             return ListView(
               physics: const BouncingScrollPhysics(),
@@ -74,15 +83,22 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 const SizedBox(height: 20),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _MonthSelector(
-                    selectedMonth: _selectedMonth,
-                    onPrevious: () => _changeMonth(-1),
-                    onNext: _canGoToNextMonth()
-                        ? () => _changeMonth(1)
-                        : null,
-                    onExport: _isExporting
-                        ? null
-                        : () => _exportMonthlyReport(tenantId),
+                  child: _StatsHeader(
+                    periodLabel: _labelForPeriod(
+                      _selectedPeriod,
+                      _selectedDate,
+                      _selectedWeekRange,
+                    ),
+                    periodName: _nameForPeriod(_selectedPeriod),
+                    onBack: _handleBack,
+                    onPrevious: () => _changePeriod(-1),
+                    onNext:
+                        _canGoToNextPeriod() ? () => _changePeriod(1) : null,
+                    onPeriodTap: _openPeriodPicker,
+                    onExport:
+                        _isExporting || _selectedPeriod != _StatsPeriod.month
+                            ? null
+                            : () => _exportMonthlyReport(tenantId),
                     isExporting: _isExporting,
                   ),
                 ),
@@ -92,6 +108,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                   child: _MonthlySummaryCard(
                     monthlyTotalsAsync: monthlyTotalsAsync,
                     previousMonthAsync: previousMonthAsync,
+                    comparisonLabel: _comparisonLabelForPeriod(_selectedPeriod),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -99,6 +116,19 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _CategoryBreakdownCard(
                     categorySpendAsync: categorySpendAsync,
+                    emptyTitle: _emptyStateTitleForPeriod(_selectedPeriod),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: SpendingTrendsCard(
+                    trendsAsync: trendsAsync,
+                    title: 'Tendencias',
+                    subtitle:
+                        'Comparado con ${_comparisonLabelForPeriod(_selectedPeriod)}',
+                    emptyMessage:
+                        'Todavía no hay suficientes cambios para detectar tendencias.',
                   ),
                 ),
                 topExpensesAsync.when(
@@ -173,37 +203,145 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     );
   }
 
-  void _changeMonth(int offset) {
+  void _handleBack() {
+    HapticFeedback.lightImpact();
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go(AppRoutes.dashboard);
+  }
+
+  void _changePeriod(int offset) {
     HapticFeedback.lightImpact();
     setState(() {
-      _selectedMonth =
-          DateTime(_selectedMonth.year, _selectedMonth.month + offset, 1);
+      if (_selectedPeriod == _StatsPeriod.week && _selectedWeekRange != null) {
+        final dayCount = _selectedWeekRange!.end
+                .difference(_selectedWeekRange!.start)
+                .inDays +
+            1;
+        final shiftedRange = DateTimeRange(
+          start:
+              _selectedWeekRange!.start.add(Duration(days: dayCount * offset)),
+          end: _selectedWeekRange!.end.add(Duration(days: dayCount * offset)),
+        );
+        _selectedWeekRange = shiftedRange;
+        _selectedDate = shiftedRange.start;
+      } else {
+        _selectedDate = _shiftDate(_selectedPeriod, _selectedDate, offset);
+      }
     });
   }
 
-  bool _canGoToNextMonth() {
+  bool _canGoToNextPeriod() {
+    final tomorrow = _startOfDay(DateTime.now()).add(const Duration(days: 1));
+    final selectedRange =
+        _rangeFor(_selectedPeriod, _selectedDate, _selectedWeekRange);
+    return selectedRange.end.isBefore(tomorrow);
+  }
+
+  Future<void> _openPeriodPicker() async {
+    final result = await showModalBottomSheet<_PeriodSheetResult>(
+      context: context,
+      backgroundColor: context.bruma.surface,
+      isScrollControlled: true,
+      builder: (context) => _PeriodPickerSheet(
+        initialPeriod: _selectedPeriod,
+        initialDate: _selectedDate,
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    switch (result.action) {
+      case _PeriodPickerAction.pickDay:
+        await _pickDay();
+        return;
+      case _PeriodPickerAction.pickWeekRange:
+        await _pickWeekRange();
+        return;
+      case _PeriodPickerAction.applySelection:
+        HapticFeedback.lightImpact();
+        setState(() {
+          _selectedPeriod = result.period;
+          _selectedDate = result.date!;
+          _selectedWeekRange = null;
+        });
+        return;
+    }
+  }
+
+  Future<void> _pickDay() async {
     final now = DateTime.now();
-    return _selectedMonth.year < now.year ||
-        (_selectedMonth.year == now.year && _selectedMonth.month < now.month);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate.isAfter(now) ? now : _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      locale: const Locale('es', 'MX'),
+    );
+
+    if (picked == null || !mounted) return;
+
+    HapticFeedback.lightImpact();
+    setState(() {
+      _selectedPeriod = _StatsPeriod.day;
+      _selectedDate = _normalizeSelectedDate(_StatsPeriod.day, picked);
+      _selectedWeekRange = null;
+    });
+  }
+
+  Future<void> _pickWeekRange() async {
+    final now = DateTime.now();
+    final initialRange = _selectedWeekRange ??
+        DateTimeRange(
+          start: _normalizeSelectedDate(_StatsPeriod.week, _selectedDate),
+          end: _normalizeSelectedDate(_StatsPeriod.week, _selectedDate)
+              .add(const Duration(days: 6)),
+        );
+
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      initialDateRange: DateTimeRange(
+        start: initialRange.start.isAfter(now) ? now : initialRange.start,
+        end: initialRange.end.isAfter(now) ? now : initialRange.end,
+      ),
+      locale: const Locale('es', 'MX'),
+      saveText: 'Aplicar',
+    );
+
+    if (picked == null || !mounted) return;
+
+    final normalized = _normalizeWeekRange(picked);
+
+    HapticFeedback.lightImpact();
+    setState(() {
+      _selectedPeriod = _StatsPeriod.week;
+      _selectedDate = normalized.start;
+      _selectedWeekRange = normalized;
+    });
   }
 
   Future<void> _exportMonthlyReport(String tenantId) async {
     final b = context.bruma;
+    final selectedMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
 
     try {
       setState(() => _isExporting = true);
-      final pdfBytes = await ref.read(monthlyReportServiceProvider).generateMonthlyReport(
-            tenantId: tenantId,
-            year: _selectedMonth.year,
-            month: _selectedMonth.month,
-          );
+      final pdfBytes =
+          await ref.read(monthlyReportServiceProvider).generateMonthlyReport(
+                tenantId: tenantId,
+                year: selectedMonth.year,
+                month: selectedMonth.month,
+              );
       HapticFeedback.lightImpact();
-      final monthName = DateFormat('MMMM', 'es_MX')
-          .format(_selectedMonth)
-          .toLowerCase();
+      final monthName =
+          DateFormat('MMMM', 'es_MX').format(selectedMonth).toLowerCase();
       await Printing.sharePdf(
         bytes: pdfBytes,
-        filename: 'bruma_${monthName}_${_selectedMonth.year}.pdf',
+        filename: 'bruma_${monthName}_${selectedMonth.year}.pdf',
       );
     } catch (error) {
       if (!mounted) return;
@@ -221,17 +359,23 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
   }
 }
 
-class _MonthSelector extends StatelessWidget {
-  final DateTime selectedMonth;
+class _StatsHeader extends StatelessWidget {
+  final String periodLabel;
+  final String periodName;
+  final VoidCallback onBack;
   final VoidCallback onPrevious;
   final VoidCallback? onNext;
+  final VoidCallback onPeriodTap;
   final VoidCallback? onExport;
   final bool isExporting;
 
-  const _MonthSelector({
-    required this.selectedMonth,
+  const _StatsHeader({
+    required this.periodLabel,
+    required this.periodName,
+    required this.onBack,
     required this.onPrevious,
     required this.onNext,
+    required this.onPeriodTap,
     required this.onExport,
     required this.isExporting,
   });
@@ -239,67 +383,123 @@ class _MonthSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final b = context.bruma;
-    final monthLabel = DateFormat('MMMM yyyy', 'es_MX').format(selectedMonth);
 
-    return Row(
+    return Column(
       children: [
-        _MonthArrow(
-          icon: Iconsax.arrow_left,
-          enabled: true,
-          onTap: onPrevious,
-        ),
-        Expanded(
-          child: Center(
-            child: Text(
-              _capitalize(monthLabel),
-              textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+        Row(
+          children: [
+            IconButton(
+              onPressed: onBack,
+              icon: Icon(
+                Iconsax.arrow_left,
                 color: b.textPrimary,
+                size: 20,
               ),
             ),
-          ),
+            const Spacer(),
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: isExporting
+                  ? Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: b.textSecondary,
+                      ),
+                    )
+                  : IconButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: onExport,
+                      icon: Icon(
+                        Iconsax.export,
+                        size: 18,
+                        color:
+                            onExport != null ? b.textSecondary : b.textTertiary,
+                      ),
+                    ),
+            ),
+          ],
         ),
-        _MonthArrow(
-          icon: Iconsax.arrow_right,
-          enabled: onNext != null,
-          onTap: onNext,
-        ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: isExporting
-              ? Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: b.textSecondary,
-                  ),
-                )
-              : IconButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: onExport,
-                  icon: Icon(
-                    Iconsax.export,
-                    size: 18,
-                    color: b.textSecondary,
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _PeriodArrow(
+              direction: _ArrowDirection.previous,
+              enabled: true,
+              onTap: onPrevious,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: onPeriodTap,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Column(
+                    children: [
+                      Text(
+                        periodName.toUpperCase(),
+                        style: GoogleFonts.dmSans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: b.textSecondary,
+                          letterSpacing: 0.08 * 10,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              periodLabel,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.dmSans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: b.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            Iconsax.arrow_down_1,
+                            size: 14,
+                            color: b.textSecondary,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _PeriodArrow(
+              direction: _ArrowDirection.next,
+              enabled: onNext != null,
+              onTap: onNext,
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-class _MonthArrow extends StatelessWidget {
-  final IconData icon;
+enum _ArrowDirection { previous, next }
+
+class _PeriodArrow extends StatelessWidget {
+  final _ArrowDirection direction;
   final bool enabled;
   final VoidCallback? onTap;
 
-  const _MonthArrow({
-    required this.icon,
+  const _PeriodArrow({
+    required this.direction,
     required this.enabled,
     required this.onTap,
   });
@@ -307,17 +507,29 @@ class _MonthArrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final b = context.bruma;
-    return GestureDetector(
+    final chevron = Icon(
+      Icons.chevron_right_rounded,
+      size: 18,
+      color: enabled ? b.textPrimary : b.textTertiary,
+    );
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
       onTap: enabled ? onTap : null,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 32,
-        height: 32,
-        child: Icon(
-          icon,
-          size: 18,
-          color: enabled ? b.textPrimary : b.textTertiary,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: b.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: enabled ? b.border : b.border.withValues(alpha: 0.5),
+          ),
         ),
+        alignment: Alignment.center,
+        child: direction == _ArrowDirection.previous
+            ? Transform.rotate(angle: math.pi, child: chevron)
+            : chevron,
       ),
     );
   }
@@ -326,10 +538,12 @@ class _MonthArrow extends StatelessWidget {
 class _MonthlySummaryCard extends StatelessWidget {
   final AsyncValue<Map<String, double>> monthlyTotalsAsync;
   final AsyncValue<double> previousMonthAsync;
+  final String comparisonLabel;
 
   const _MonthlySummaryCard({
     required this.monthlyTotalsAsync,
     required this.previousMonthAsync,
+    required this.comparisonLabel,
   });
 
   @override
@@ -422,7 +636,7 @@ class _MonthlySummaryCard extends StatelessWidget {
 
                   if (previousMonthExpenses <= 0) {
                     return Text(
-                      '↑ 100.0% más que el mes pasado',
+                      '↑ 100.0% más que $comparisonLabel',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -432,7 +646,8 @@ class _MonthlySummaryCard extends StatelessWidget {
                   }
 
                   final differencePercent =
-                      ((expenses - previousMonthExpenses) / previousMonthExpenses) *
+                      ((expenses - previousMonthExpenses) /
+                              previousMonthExpenses) *
                           100;
                   final increased = differencePercent >= 0;
                   final prefix = increased ? '↑' : '↓';
@@ -440,7 +655,7 @@ class _MonthlySummaryCard extends StatelessWidget {
                   final color = increased ? b.error : b.success;
 
                   return Text(
-                    '$prefix ${differencePercent.abs().toStringAsFixed(1)}% $label que el mes pasado',
+                    '$prefix ${differencePercent.abs().toStringAsFixed(1)}% $label que $comparisonLabel',
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -499,9 +714,11 @@ class _SummaryColumn extends StatelessWidget {
 
 class _CategoryBreakdownCard extends StatelessWidget {
   final AsyncValue<Map<String, double>> categorySpendAsync;
+  final String emptyTitle;
 
   const _CategoryBreakdownCard({
     required this.categorySpendAsync,
+    required this.emptyTitle,
   });
 
   @override
@@ -526,12 +743,13 @@ class _CategoryBreakdownCard extends StatelessWidget {
           final entries = categorySpend.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value));
           final topEntries = entries.take(6).toList();
-          final total = topEntries.fold<double>(0, (sum, item) => sum + item.value);
+          final total =
+              topEntries.fold<double>(0, (sum, item) => sum + item.value);
 
           if (topEntries.isEmpty || total <= 0) {
-            return const BrumaEmptyState(
+            return BrumaEmptyState(
               type: BrumaEmptyType.stats,
-              title: 'Sin movimientos este mes',
+              title: emptyTitle,
               subtitle: 'Registra tu primer gasto para ver tus estadísticas',
             );
           }
@@ -710,7 +928,9 @@ class _InlineState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final b = context.bruma;
-    final padding = compact ? const EdgeInsets.symmetric(vertical: 12) : const EdgeInsets.all(24);
+    final padding = compact
+        ? const EdgeInsets.symmetric(vertical: 12)
+        : const EdgeInsets.all(24);
 
     return Center(
       child: Padding(
@@ -732,6 +952,589 @@ class _InlineState extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _PeriodPickerSheet extends StatefulWidget {
+  final _StatsPeriod initialPeriod;
+  final DateTime initialDate;
+
+  const _PeriodPickerSheet({
+    required this.initialPeriod,
+    required this.initialDate,
+  });
+
+  @override
+  State<_PeriodPickerSheet> createState() => _PeriodPickerSheetState();
+}
+
+class _PeriodPickerSheetState extends State<_PeriodPickerSheet> {
+  late _StatsPeriod _selectedPeriod;
+  late int _selectedYear;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedPeriod = widget.initialPeriod;
+    _selectedYear = widget.initialDate.year;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.bruma;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Seleccionar periodo',
+              style: GoogleFonts.dmSans(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: b.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Elige si quieres ver estadísticas por día, semana, mes o año.',
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: b.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _StatsPeriod.values.map((period) {
+                final selected = period == _selectedPeriod;
+                return ChoiceChip(
+                  label: Text(_nameForPeriod(period)),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _selectedPeriod = period),
+                  labelStyle: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? b.primary : b.textPrimary,
+                  ),
+                  selectedColor: b.primary.withValues(alpha: 0.14),
+                  backgroundColor: b.surfaceAlt,
+                  side: BorderSide(
+                    color: selected ? b.primary : b.border,
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 18),
+            _buildPickerContent(context, b),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPickerContent(BuildContext context, BrumaTheme b) {
+    switch (_selectedPeriod) {
+      case _StatsPeriod.day:
+        return _ActionPickerCard(
+          icon: Iconsax.calendar_1,
+          title: 'Elegir día',
+          subtitle: 'Abre el calendario normal para seleccionar una fecha.',
+          buttonLabel: 'Abrir calendario',
+          onTap: () => Navigator.of(context).pop(
+            const _PeriodSheetResult(
+              action: _PeriodPickerAction.pickDay,
+              period: _StatsPeriod.day,
+            ),
+          ),
+        );
+      case _StatsPeriod.week:
+        return _ActionPickerCard(
+          icon: Iconsax.calendar_search,
+          title: 'Elegir rango semanal',
+          subtitle:
+              'Selecciona fecha de inicio y fecha de fin en un solo rango.',
+          buttonLabel: 'Elegir rango',
+          onTap: () => Navigator.of(context).pop(
+            const _PeriodSheetResult(
+              action: _PeriodPickerAction.pickWeekRange,
+              period: _StatsPeriod.week,
+            ),
+          ),
+        );
+      case _StatsPeriod.month:
+        return _MonthPickerCard(
+          selectedYear: _selectedYear,
+          activeYear: widget.initialDate.year,
+          selectedMonth: widget.initialDate.month,
+          onPreviousYear: () => setState(() => _selectedYear--),
+          onNextYear: () {
+            final nowYear = DateTime.now().year;
+            if (_selectedYear < nowYear) {
+              setState(() => _selectedYear++);
+            }
+          },
+          onMonthTap: (month) {
+            Navigator.of(context).pop(
+              _PeriodSheetResult(
+                action: _PeriodPickerAction.applySelection,
+                period: _StatsPeriod.month,
+                date: DateTime(_selectedYear, month, 1),
+              ),
+            );
+          },
+        );
+      case _StatsPeriod.year:
+        final nowYear = DateTime.now().year;
+        final years = List<int>.generate(12, (index) => nowYear - index);
+        return _YearPickerCard(
+          years: years,
+          selectedYear: widget.initialDate.year,
+          onYearTap: (year) {
+            Navigator.of(context).pop(
+              _PeriodSheetResult(
+                action: _PeriodPickerAction.applySelection,
+                period: _StatsPeriod.year,
+                date: DateTime(year, 1, 1),
+              ),
+            );
+          },
+        );
+    }
+  }
+}
+
+enum _PeriodPickerAction { pickDay, pickWeekRange, applySelection }
+
+class _PeriodSheetResult {
+  final _PeriodPickerAction action;
+  final _StatsPeriod period;
+  final DateTime? date;
+
+  const _PeriodSheetResult({
+    required this.action,
+    required this.period,
+    this.date,
+  });
+}
+
+class _ActionPickerCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
+  final VoidCallback onTap;
+
+  const _ActionPickerCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.buttonLabel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.bruma;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: b.surfaceAlt,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: b.border),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: b.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: b.primary, size: 20),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: GoogleFonts.dmSans(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: b.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(
+              fontSize: 13,
+              color: b.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: onTap,
+              style: FilledButton.styleFrom(
+                backgroundColor: b.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                buttonLabel,
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MonthPickerCard extends StatelessWidget {
+  final int selectedYear;
+  final int activeYear;
+  final int selectedMonth;
+  final VoidCallback onPreviousYear;
+  final VoidCallback onNextYear;
+  final ValueChanged<int> onMonthTap;
+
+  const _MonthPickerCard({
+    required this.selectedYear,
+    required this.activeYear,
+    required this.selectedMonth,
+    required this.onPreviousYear,
+    required this.onNextYear,
+    required this.onMonthTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    const monthLabels = [
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
+    ];
+
+    return Column(
+      children: [
+        _PickerYearHeader(
+          label: '$selectedYear',
+          onPrevious: onPreviousYear,
+          onNext: onNextYear,
+        ),
+        const SizedBox(height: 14),
+        GridView.builder(
+          shrinkWrap: true,
+          itemCount: monthLabels.length,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.6,
+          ),
+          itemBuilder: (context, index) {
+            final month = index + 1;
+            final enabled = selectedYear < now.year ||
+                (selectedYear == now.year && month <= now.month);
+            final selected =
+                selectedYear == activeYear && month == selectedMonth;
+            return _PickerOptionTile(
+              label: monthLabels[index],
+              selected: selected,
+              enabled: enabled,
+              onTap: enabled ? () => onMonthTap(month) : null,
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _YearPickerCard extends StatelessWidget {
+  final List<int> years;
+  final int selectedYear;
+  final ValueChanged<int> onYearTap;
+
+  const _YearPickerCard({
+    required this.years,
+    required this.selectedYear,
+    required this.onYearTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      itemCount: years.length,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.6,
+      ),
+      itemBuilder: (context, index) {
+        final year = years[index];
+        return _PickerOptionTile(
+          label: '$year',
+          selected: year == selectedYear,
+          enabled: true,
+          onTap: () => onYearTap(year),
+        );
+      },
+    );
+  }
+}
+
+class _PickerYearHeader extends StatelessWidget {
+  final String label;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  const _PickerYearHeader({
+    required this.label,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.bruma;
+
+    return Row(
+      children: [
+        _PeriodArrow(
+          direction: _ArrowDirection.previous,
+          enabled: true,
+          onTap: onPrevious,
+        ),
+        Expanded(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: b.textPrimary,
+            ),
+          ),
+        ),
+        _PeriodArrow(
+          direction: _ArrowDirection.next,
+          enabled: true,
+          onTap: onNext,
+        ),
+      ],
+    );
+  }
+}
+
+class _PickerOptionTile extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  const _PickerOptionTile({
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.bruma;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: enabled ? onTap : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: selected ? b.primary.withValues(alpha: 0.14) : b.surfaceAlt,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? b.primary : b.border,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: enabled
+                ? (selected ? b.primary : b.textPrimary)
+                : b.textTertiary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+BudgetStatsRange _rangeFor(
+  _StatsPeriod period,
+  DateTime date,
+  DateTimeRange? weekRange,
+) {
+  final normalized = _normalizeSelectedDate(period, date);
+
+  switch (period) {
+    case _StatsPeriod.day:
+      return BudgetStatsRange(
+        start: DateTime(normalized.year, normalized.month, normalized.day),
+        end: DateTime(normalized.year, normalized.month, normalized.day + 1),
+      );
+    case _StatsPeriod.week:
+      if (weekRange != null) {
+        return BudgetStatsRange(
+          start: _startOfDay(weekRange.start),
+          end: _startOfDay(weekRange.end).add(const Duration(days: 1)),
+        );
+      }
+      final start = DateTime(
+        normalized.year,
+        normalized.month,
+        normalized.day,
+      );
+      return BudgetStatsRange(
+        start: start,
+        end: start.add(const Duration(days: 7)),
+      );
+    case _StatsPeriod.month:
+      return BudgetStatsRange(
+        start: DateTime(normalized.year, normalized.month, 1),
+        end: DateTime(normalized.year, normalized.month + 1, 1),
+      );
+    case _StatsPeriod.year:
+      return BudgetStatsRange(
+        start: DateTime(normalized.year, 1, 1),
+        end: DateTime(normalized.year + 1, 1, 1),
+      );
+  }
+}
+
+DateTime _normalizeSelectedDate(_StatsPeriod period, DateTime date) {
+  switch (period) {
+    case _StatsPeriod.day:
+      return DateTime(date.year, date.month, date.day);
+    case _StatsPeriod.week:
+      final weekdayOffset = date.weekday - DateTime.monday;
+      return DateTime(date.year, date.month, date.day - weekdayOffset);
+    case _StatsPeriod.month:
+      return DateTime(date.year, date.month, 1);
+    case _StatsPeriod.year:
+      return DateTime(date.year, 1, 1);
+  }
+}
+
+DateTime _shiftDate(_StatsPeriod period, DateTime date, int offset) {
+  switch (period) {
+    case _StatsPeriod.day:
+      return DateTime(date.year, date.month, date.day + offset);
+    case _StatsPeriod.week:
+      return DateTime(date.year, date.month, date.day + (offset * 7));
+    case _StatsPeriod.month:
+      return DateTime(date.year, date.month + offset, 1);
+    case _StatsPeriod.year:
+      return DateTime(date.year + offset, 1, 1);
+  }
+}
+
+String _labelForPeriod(
+  _StatsPeriod period,
+  DateTime date,
+  DateTimeRange? weekRange,
+) {
+  switch (period) {
+    case _StatsPeriod.day:
+      return _capitalize(DateFormat('d MMMM yyyy', 'es_MX').format(date));
+    case _StatsPeriod.week:
+      final start = weekRange?.start ?? _normalizeSelectedDate(period, date);
+      final end = weekRange?.end ?? start.add(const Duration(days: 6));
+      return '${DateFormat('d MMM', 'es_MX').format(start)} - ${DateFormat('d MMM yyyy', 'es_MX').format(end)}';
+    case _StatsPeriod.month:
+      return _capitalize(DateFormat('MMMM yyyy', 'es_MX').format(date));
+    case _StatsPeriod.year:
+      return DateFormat('yyyy', 'es_MX').format(date);
+  }
+}
+
+DateTimeRange _normalizeWeekRange(DateTimeRange range) {
+  return DateTimeRange(
+    start: _startOfDay(range.start),
+    end: _startOfDay(range.end),
+  );
+}
+
+DateTime _startOfDay(DateTime date) {
+  return DateTime(date.year, date.month, date.day);
+}
+
+String _nameForPeriod(_StatsPeriod period) {
+  switch (period) {
+    case _StatsPeriod.day:
+      return 'Día';
+    case _StatsPeriod.week:
+      return 'Semana';
+    case _StatsPeriod.month:
+      return 'Mes';
+    case _StatsPeriod.year:
+      return 'Año';
+  }
+}
+
+String _comparisonLabelForPeriod(_StatsPeriod period) {
+  switch (period) {
+    case _StatsPeriod.day:
+      return 'el día anterior';
+    case _StatsPeriod.week:
+      return 'la semana anterior';
+    case _StatsPeriod.month:
+      return 'el mes pasado';
+    case _StatsPeriod.year:
+      return 'el año pasado';
+  }
+}
+
+String _emptyStateTitleForPeriod(_StatsPeriod period) {
+  switch (period) {
+    case _StatsPeriod.day:
+      return 'Sin movimientos este día';
+    case _StatsPeriod.week:
+      return 'Sin movimientos esta semana';
+    case _StatsPeriod.month:
+      return 'Sin movimientos este mes';
+    case _StatsPeriod.year:
+      return 'Sin movimientos este año';
   }
 }
 

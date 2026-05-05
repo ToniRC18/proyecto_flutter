@@ -19,9 +19,7 @@ class NotificationHandler {
         final transactionId = data['transaction_id'] as String?;
         if (transactionId != null) {
           // Navega al detalle de transacción pasando el id como query param
-          context.push(
-            '${AppRoutes.transactionDetail}?id=$transactionId',
-          );
+          context.go('${AppRoutes.transactionDetail}?id=$transactionId');
         } else {
           context.go(AppRoutes.dashboard);
         }
