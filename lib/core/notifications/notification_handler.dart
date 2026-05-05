@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'notification_service.dart';
 import '../../core/router/app_routes.dart';
+import '../router/app_router.dart';
 
 /// Determina a qué pantalla navegar según el campo `screen` del payload
 /// de una notificación FCM.
@@ -30,10 +32,23 @@ class NotificationHandler {
         context.push(AppRoutes.sharedSpaces);
         break;
 
+      case 'bills':
+        // Navega a la lista de pagos recurrentes.
+        context.push(AppRoutes.bills);
+        break;
+
       default:
         // Pantalla desconocida → Dashboard
         context.go(AppRoutes.dashboard);
         break;
     }
+  }
+
+  /// Resuelve cualquier navegación pendiente una vez que el router ya existe.
+  static void handlePendingNavigation() {
+    final context = rootNavigatorKey.currentContext;
+    final data = NotificationService.consumePendingNavigationData();
+    if (context == null || data == null) return;
+    handle(context, data);
   }
 }

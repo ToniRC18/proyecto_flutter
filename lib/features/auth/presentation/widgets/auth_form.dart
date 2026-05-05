@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Formulario reutilizable para login y registro.
 /// Recibe los controllers del padre y llama callbacks en submit/toggle.
@@ -26,12 +26,14 @@ class AuthForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Campo nombre (solo en registro)
         if (!isLogin) ...[
           _buildTextField(
+            context: context,
             controller: nameController,
             label: 'Nombre',
             icon: Icons.person_outline,
@@ -41,6 +43,7 @@ class AuthForm extends StatelessWidget {
 
         // Campo email
         _buildTextField(
+          context: context,
           controller: emailController,
           label: 'Email',
           icon: Icons.email_outlined,
@@ -50,6 +53,7 @@ class AuthForm extends StatelessWidget {
 
         // Campo contraseña
         _buildTextField(
+          context: context,
           controller: passwordController,
           label: 'Contraseña',
           icon: Icons.lock_outline,
@@ -60,32 +64,33 @@ class AuthForm extends StatelessWidget {
         // Botón principal
         SizedBox(
           height: 52,
-          child: ElevatedButton(
-            onPressed: isLoading ? null : onSubmit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
+          child: GestureDetector(
+            onTap: isLoading ? null : onSubmit,
+            child: Container(
+              decoration: BoxDecoration(
+                color: b.primary,
                 borderRadius: BorderRadius.circular(14),
               ),
-              elevation: 0,
+              child: Center(
+                child: isLoading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : Text(
+                        isLogin ? 'Iniciar sesión' : 'Crear cuenta',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: b.onPrimary,
+                        ),
+                      ),
+              ),
             ),
-            child: isLoading
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2.5,
-                    ),
-                  )
-                : Text(
-                    isLogin ? 'Iniciar sesión' : 'Crear cuenta',
-                    style: GoogleFonts.poppins(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
           ),
         ),
         const SizedBox(height: 20),
@@ -98,8 +103,8 @@ class AuthForm extends StatelessWidget {
               isLogin
                   ? '¿No tienes cuenta? Regístrate'
                   : '¿Ya tienes cuenta? Inicia sesión',
-              style: GoogleFonts.poppins(
-                color: AppColors.primary,
+              style: GoogleFonts.dmSans(
+                color: b.primary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -111,42 +116,42 @@ class AuthForm extends StatelessWidget {
   }
 
   Widget _buildTextField({
+    required BuildContext context,
     required TextEditingController controller,
     required String label,
     required IconData icon,
     bool obscure = false,
     TextInputType keyboardType = TextInputType.text,
   }) {
+    final b = context.bruma;
     return TextField(
       controller: controller,
       obscureText: obscure,
       keyboardType: keyboardType,
-      style: GoogleFonts.poppins(
-        color: AppColors.textPrimary,
+      style: GoogleFonts.dmSans(
+        color: b.textPrimary,
         fontSize: 14,
       ),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: GoogleFonts.poppins(
-          color: AppColors.textSecondary,
+        labelStyle: GoogleFonts.dmSans(
+          color: b.textSecondary,
           fontSize: 14,
         ),
-        prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
+        prefixIcon: Icon(icon, color: b.primary, size: 20),
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.6),
+        fillColor: b.surfaceAlt,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: AppColors.primary.withValues(alpha: 0.15),
-          ),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: b.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: b.primary, width: 1.5),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

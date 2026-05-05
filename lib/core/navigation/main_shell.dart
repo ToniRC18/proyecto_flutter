@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../offline/providers/connectivity_provider.dart';
+import '../theme/app_theme.dart';
 import '../../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../../features/accounts/presentation/accounts_screen.dart';
-import '../../../features/budget/presentation/budget_screen.dart';
+import '../../../features/budget/presentation/stats_screen.dart';
 import '../../../features/profile/presentation/profile_screen.dart';
 import '../widgets/app_bottom_nav_bar.dart';
+import '../widgets/offline_banner.dart';
 
 /// Widget raíz que envuelve las pantallas del bottom nav con IndexedStack.
 /// El IndexedStack mantiene el estado de cada tab al cambiar entre ellas.
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends ConsumerState<MainShell> {
   // Índice activo en la navbar (índice 2 = botón "+", no es una tab)
   int _currentIndex = 0;
 
@@ -24,7 +28,7 @@ class _MainShellState extends State<MainShell> {
     DashboardScreen(),
     AccountsScreen(),
     SizedBox.shrink(), // placeholder para el índice 2 (botón +)
-    BudgetScreen(),
+    StatsScreen(),
     ProfileScreen(),
   ];
 
@@ -36,14 +40,23 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(connectivitySyncListenerProvider);
+    final b = context.bruma;
+
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      // IndexedStack conserva el estado de cada pantalla
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      backgroundColor: b.bg,
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            // IndexedStack conserva el estado de cada pantalla
+            child: IndexedStack(
+              index: _currentIndex,
+              children: _screens,
+            ),
+          ),
+        ],
       ),
-      // Fondo de la extendedBody se muestra detrás de la navbar
       extendBody: true,
       bottomNavigationBar: AppBottomNavBar(
         currentIndex: _currentIndex,

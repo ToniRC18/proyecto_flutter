@@ -1,13 +1,17 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPATIBILIDAD: GlassCard ahora redirige a un Container con tokens Bruma.
+// Se mantiene para que archivos que aún lo importen compilen sin errores.
+// Los nuevos widgets deben usar AppCard directamente.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class GlassCard extends StatelessWidget {
   final Widget child;
   final double? width;
   final double? height;
-  final EdgeInsetsGeometry? padding;
-  final EdgeInsetsGeometry? margin;
+  final EdgeInsets padding;
   final double borderRadius;
 
   const GlassCard({
@@ -15,46 +19,23 @@ class GlassCard extends StatelessWidget {
     required this.child,
     this.width,
     this.height,
-    this.padding,
-    this.margin,
-    this.borderRadius = 24.0,
+    this.padding = const EdgeInsets.all(16),
+    this.borderRadius = 20,
   });
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     return Container(
       width: width,
       height: height,
-      margin: margin,
+      padding: padding,
       decoration: BoxDecoration(
+        color: b.surface,
         borderRadius: BorderRadius.circular(borderRadius),
-        boxShadow: [
-          // Sombra muy suave como se solicitó
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: b.border, width: 1),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: Container(
-            padding: padding ?? const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              color: AppColors.glassSurface,
-              borderRadius: BorderRadius.circular(borderRadius),
-              border: Border.all(
-                color: AppColors.glassBorder,
-                width: 1.5,
-              ),
-            ),
-            child: child,
-          ),
-        ),
-      ),
+      child: child,
     );
   }
 }

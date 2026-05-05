@@ -3,31 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/theme/app_colors.dart';
+import 'package:iconsax/iconsax.dart';
+import '../../../core/domain/app_categories.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/tenant_provider.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/amount_input_field.dart';
 import '../../dashboard/data/dashboard_repository.dart';
 import '../../dashboard/domain/account_model.dart';
 import '../data/transaction_repository.dart';
-import 'widgets/numeric_keyboard.dart';
-
-/// Categorías de ingresos disponibles
-const List<_IncomeCategory> kIncomeCategories = [
-  _IncomeCategory('💼', 'Salary'),
-  _IncomeCategory('💻', 'Freelance'),
-  _IncomeCategory('🎁', 'Gift'),
-  _IncomeCategory('📈', 'Investment'),
-  _IncomeCategory('💰', 'Bonus'),
-  _IncomeCategory('➕', 'Other'),
-];
 
 class _IncomeCategory {
+  final String id;
   final String emoji;
   final String label;
-  const _IncomeCategory(this.emoji, this.label);
+  const _IncomeCategory(this.id, this.emoji, this.label);
+
+  factory _IncomeCategory.fromAppCategory(AppCategory category) {
+    return _IncomeCategory(category.id, category.emoji, category.label);
+  }
 }
 
+final List<_IncomeCategory> kIncomeCategories = AppCategories.income
+    .map(_IncomeCategory.fromAppCategory)
+    .toList(growable: false);
+
 /// Pantalla para registrar un ingreso.
-/// Layout idéntico al AddExpenseScreen pero con paleta verde.
+/// Layout idéntico al AddExpenseScreen pero con paleta verde (success).
 class AddIncomeScreen extends ConsumerStatefulWidget {
   const AddIncomeScreen({super.key});
 
@@ -36,45 +38,21 @@ class AddIncomeScreen extends ConsumerStatefulWidget {
 }
 
 class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
-  String _amount = '0';
+  final _amountCtrl = TextEditingController();
   _IncomeCategory _selectedCategory = kIncomeCategories.first;
   Account? _selectedAccount;
   final _notesCtrl = TextEditingController();
-  bool _isSavePressed = false;
   bool _isLoading = false;
-
-  static const _incomeGreen = Color(0xFF2E7D32);
 
   @override
   void dispose() {
+    _amountCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
 
-  void _handleKeyPress(String key) {
-    setState(() {
-      if (_amount == '0' && key != '.') {
-        _amount = key;
-      } else if (key == '.' && _amount.contains('.')) {
-        return;
-      } else {
-        if (_amount.length < 9) _amount += key;
-      }
-    });
-  }
-
-  void _handleBackspace() {
-    setState(() {
-      if (_amount.length > 1) {
-        _amount = _amount.substring(0, _amount.length - 1);
-      } else {
-        _amount = '0';
-      }
-    });
-  }
-
   Future<void> _saveIncome() async {
-    final amountValue = double.tryParse(_amount) ?? 0.0;
+    final amountValue = AmountInputField.parseAmount(_amountCtrl.text);
     if (amountValue <= 0) return;
     if (_selectedAccount == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,8 +70,9 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
             tenantId: tenantId,
             accountId: _selectedAccount!.id,
             amount: amountValue,
-            category: _selectedCategory.label,
-            notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+            category: _selectedCategory.id,
+            notes:
+                _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
           );
 
       // Invalidar providers para refrescar datos del dashboard y accounts
@@ -115,14 +94,15 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     final tenantAsync = ref.watch(tenantProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: b.bg,
       body: SafeArea(
         child: tenantAsync.when(
           loading: () =>
-              const Center(child: CircularProgressIndicator(color: _incomeGreen)),
+              Center(child: CircularProgressIndicator(color: b.success)),
           error: (err, _) => Center(child: Text('Error: $err')),
           data: (tenantId) {
             final accountsAsync = ref.watch(accountsProvider(tenantId));
@@ -131,21 +111,23 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
               children: [
                 // ── Top Bar ──────────────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.close,
-                            color: AppColors.textPrimary),
+                        icon: Icon(Iconsax.close_circle,
+                            color: b.textPrimary, size: 22),
                         onPressed: () => context.pop(),
                       ),
                       Text(
-                        'New Income',
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                        'Nuevo Ingreso',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: b.textPrimary,
+                          letterSpacing: -0.02 * 17,
                         ),
                       ),
                       const SizedBox(width: 48),
@@ -160,13 +142,11 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                         const SizedBox(height: 32),
 
                         // ── Monto en verde ───────────────────────────
-                        Text(
-                          '\$$_amount',
-                          style: GoogleFonts.poppins(
-                            fontSize: 56,
-                            fontWeight: FontWeight.bold,
-                            color: _incomeGreen,
-                            height: 1.1,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: AmountInputField(
+                            controller: _amountCtrl,
+                            amountColor: b.success,
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -176,25 +156,28 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 24.0),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 24),
                               child: Text(
-                                'Seleccionar Cuenta',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
+                                'CUENTA',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: AppColors.textSecondary,
+                                  color: b.textSecondary,
+                                  letterSpacing: 0.06 * 12,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                             SizedBox(
-                              height: 50,
+                              height: 44,
                               child: accountsAsync.when(
                                 data: (accounts) {
                                   if (accounts.isEmpty) {
-                                    return const Center(
-                                        child: Text('No hay cuentas'));
+                                    return Center(
+                                        child: Text('No hay cuentas',
+                                            style: GoogleFonts.dmSans(
+                                                color: b.textTertiary)));
                                   }
                                   if (_selectedAccount == null &&
                                       accounts.isNotEmpty) {
@@ -211,39 +194,54 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                                           _selectedAccount?.id == acc.id;
                                       return Padding(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 4.0),
-                                        child: ChoiceChip(
-                                          label: Text(acc.name),
-                                          selected: isSelected,
-                                          onSelected: (val) {
-                                            if (val) {
-                                              setState(() =>
-                                                  _selectedAccount = acc);
-                                            }
-                                          },
-                                          selectedColor: _incomeGreen,
-                                          labelStyle: GoogleFonts.poppins(
-                                            color: isSelected
-                                                ? Colors.white
-                                                : AppColors.textPrimary,
-                                            fontSize: 13,
-                                          ),
-                                          backgroundColor:
-                                              Colors.white.withAlpha(127),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(20),
-                                            side: BorderSide.none,
+                                            horizontal: 4),
+                                        child: GestureDetector(
+                                          onTap: () => setState(
+                                              () => _selectedAccount = acc),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                                milliseconds: 200),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 16),
+                                            decoration: BoxDecoration(
+                                              color: isSelected
+                                                  ? b.success
+                                                  : b.surfaceAlt,
+                                              borderRadius:
+                                                  BorderRadius.circular(100),
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? b.success
+                                                    : b.border,
+                                              ),
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                acc.name,
+                                                style: GoogleFonts.dmSans(
+                                                  color: isSelected
+                                                      ? Colors.white
+                                                      : b.textPrimary,
+                                                  fontSize: 13,
+                                                  fontWeight: isSelected
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w400,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       );
                                     },
                                   );
                                 },
-                                loading: () =>
-                                    const Center(child: CircularProgressIndicator()),
-                                error: (_, __) => const Center(
-                                    child: Text('Error al cargar cuentas')),
+                                loading: () => Center(
+                                    child: CircularProgressIndicator(
+                                        color: b.success, strokeWidth: 2)),
+                                error: (_, __) => Center(
+                                    child: Text('Error',
+                                        style: GoogleFonts.dmSans(
+                                            color: b.textTertiary))),
                               ),
                             ),
                           ],
@@ -253,23 +251,23 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
 
                         // ── Selector de categoría ────────────────────
                         Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 24.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              'Categoría',
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
+                              'CATEGORÍA',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
+                                color: b.textSecondary,
+                                letterSpacing: 0.06 * 12,
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         SizedBox(
-                          height: 48,
+                          height: 44,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
                             physics: const BouncingScrollPhysics(),
@@ -283,41 +281,34 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                                 onTap: () =>
                                     setState(() => _selectedCategory = cat),
                                 child: AnimatedContainer(
-                                  duration:
-                                      const Duration(milliseconds: 200),
-                                  margin: const EdgeInsets.symmetric(
-                                      horizontal: 6),
+                                  duration: const Duration(milliseconds: 200),
+                                  margin:
+                                      const EdgeInsets.symmetric(horizontal: 4),
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16),
                                   decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? _incomeGreen
-                                        : AppColors.glassSurface,
-                                    borderRadius:
-                                        BorderRadius.circular(24),
+                                    color:
+                                        isSelected ? b.success : b.surfaceAlt,
+                                    borderRadius: BorderRadius.circular(100),
                                     border: Border.all(
-                                      color: isSelected
-                                          ? _incomeGreen
-                                          : AppColors.glassBorder,
-                                      width: 1.5,
+                                      color: isSelected ? b.success : b.border,
                                     ),
                                   ),
                                   child: Row(
                                     children: [
                                       Text(cat.emoji,
-                                          style: const TextStyle(
-                                              fontSize: 18)),
+                                          style: const TextStyle(fontSize: 18)),
                                       const SizedBox(width: 6),
                                       Text(
                                         cat.label,
-                                        style: GoogleFonts.poppins(
+                                        style: GoogleFonts.dmSans(
                                           fontWeight: isSelected
                                               ? FontWeight.w600
                                               : FontWeight.w500,
                                           color: isSelected
                                               ? Colors.white
-                                              : AppColors.textPrimary,
-                                          fontSize: 14,
+                                              : b.textPrimary,
+                                          fontSize: 13,
                                         ),
                                       ),
                                     ],
@@ -332,33 +323,26 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
 
                         // ── Campo de notas ───────────────────────────
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: TextField(
                             controller: _notesCtrl,
                             decoration: InputDecoration(
-                              hintText: 'Add a note...',
-                              hintStyle: GoogleFonts.poppins(
-                                  color: AppColors.textLight),
+                              hintText: 'Agregar nota...',
+                              hintStyle:
+                                  GoogleFonts.dmSans(color: b.textTertiary),
                               filled: true,
-                              fillColor: Colors.white.withAlpha(127),
+                              fillColor: b.surfaceAlt,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide(
-                                    color: AppColors.glassBorder),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide(
-                                    color: AppColors.glassBorder),
+                                borderSide: BorderSide.none,
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
-                                borderSide: const BorderSide(
-                                    color: _incomeGreen, width: 2),
+                                borderSide:
+                                    BorderSide(color: b.success, width: 1.5),
                               ),
                             ),
-                            style: GoogleFonts.poppins(),
+                            style: GoogleFonts.dmSans(color: b.textPrimary),
                           ),
                         ),
                       ],
@@ -366,66 +350,15 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                   ),
                 ),
 
-                // ── Teclado numérico ──────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 24.0),
-                  child: NumericKeyboard(
-                    onKeyPress: _handleKeyPress,
-                    onBackspace: _handleBackspace,
-                  ),
-                ),
-
                 // ── Botón Save Income ─────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24.0, vertical: 16.0),
-                  child: GestureDetector(
-                    onTapDown: (_) =>
-                        setState(() => _isSavePressed = true),
-                    onTapUp: (_) {
-                      setState(() => _isSavePressed = false);
-                      if (!_isLoading) _saveIncome();
-                    },
-                    onTapCancel: () =>
-                        setState(() => _isSavePressed = false),
-                    child: AnimatedScale(
-                      scale: _isSavePressed ? 0.95 : 1.0,
-                      duration: const Duration(milliseconds: 100),
-                      child: Container(
-                        width: double.infinity,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: _incomeGreen,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _incomeGreen.withAlpha(76),
-                              blurRadius: 15,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        alignment: Alignment.center,
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2.5),
-                              )
-                            : Text(
-                                'Save Income',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                      ),
-                    ),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: AppButton(
+                    label: 'Guardar Ingreso',
+                    onPressed: _isLoading ? null : _saveIncome,
+                    loading: _isLoading,
                   ),
                 ),
-                const SizedBox(height: 8),
               ],
             );
           },

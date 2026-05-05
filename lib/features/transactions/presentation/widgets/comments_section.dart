@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/glass_card.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../../data/comments_repository.dart';
 import '../../domain/transaction_comment_model.dart';
 
@@ -53,10 +53,11 @@ class _CommentsSectionState extends ConsumerState<CommentsSection> {
       });
     } catch (e) {
       if (mounted) {
+        final b = context.bruma;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Error al enviar comentario: $e',
-              style: GoogleFonts.poppins()),
-          backgroundColor: Colors.red.shade600,
+              style: GoogleFonts.dmSans()),
+          backgroundColor: b.error,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -69,6 +70,7 @@ class _CommentsSectionState extends ConsumerState<CommentsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     final commentsAsync =
         ref.watch(commentsStreamProvider(widget.transactionId));
 
@@ -85,12 +87,12 @@ class _CommentsSectionState extends ConsumerState<CommentsSection> {
 
         // ── Lista de comentarios ─────────────────────────────────
         commentsAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
+          loading: () => Center(
+            child: CircularProgressIndicator(color: b.primary),
           ),
           error: (err, _) => Center(
             child: Text('Error al cargar comentarios',
-                style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+                style: GoogleFonts.dmSans(color: b.textSecondary)),
           ),
           data: (comments) {
             if (comments.isEmpty) {
@@ -99,7 +101,7 @@ class _CommentsSectionState extends ConsumerState<CommentsSection> {
                 child: Center(
                   child: Text(
                     'Sé el primero en comentar 💬',
-                    style: GoogleFonts.poppins(color: AppColors.textLight),
+                    style: GoogleFonts.dmSans(color: b.textTertiary),
                   ),
                 ),
               );
@@ -119,9 +121,8 @@ class _CommentsSectionState extends ConsumerState<CommentsSection> {
         const SizedBox(height: 12),
 
         // ── Input de nuevo comentario ────────────────────────────
-        GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          borderRadius: 20,
+        AppCard(
+          padding: 12,
           child: Row(
             children: [
               Expanded(
@@ -130,12 +131,13 @@ class _CommentsSectionState extends ConsumerState<CommentsSection> {
                   decoration: InputDecoration(
                     hintText: 'Agrega un comentario...',
                     hintStyle:
-                        GoogleFonts.poppins(color: AppColors.textLight),
+                        GoogleFonts.dmSans(color: b.textTertiary),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8),
                   ),
                   style:
-                      GoogleFonts.poppins(color: AppColors.textPrimary),
+                      GoogleFonts.dmSans(color: b.textPrimary),
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _enviarComentario(),
                   maxLines: null,
@@ -150,8 +152,8 @@ class _CommentsSectionState extends ConsumerState<CommentsSection> {
                   height: 40,
                   decoration: BoxDecoration(
                     color: _sending
-                        ? AppColors.primary.withAlpha(80)
-                        : AppColors.primary,
+                        ? b.primary.withValues(alpha: 0.4)
+                        : b.primary,
                     shape: BoxShape.circle,
                   ),
                   child: _sending
@@ -161,8 +163,8 @@ class _CommentsSectionState extends ConsumerState<CommentsSection> {
                           child: CircularProgressIndicator(
                               color: Colors.white, strokeWidth: 2),
                         )
-                      : const Icon(Icons.send_rounded,
-                          color: Colors.white, size: 18),
+                      : Icon(Icons.send_rounded,
+                          color: b.onPrimary, size: 18),
                 ),
               ),
             ],
@@ -181,14 +183,15 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     return Row(
       children: [
         Text(
           'Comentarios',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.dmSans(
             fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+            color: b.textPrimary,
           ),
         ),
         if (count > 0) ...[
@@ -196,14 +199,14 @@ class _SectionTitle extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(20),
+              color: b.primary,
+              borderRadius: BorderRadius.circular(100),
             ),
             child: Text(
               '$count',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.dmSans(
                 fontSize: 12,
-                color: Colors.white,
+                color: b.onPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -222,14 +225,14 @@ class _CommentBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     final initials = _initials(comment.authorName);
     final relativeDate = _relativeDate(comment.createdAt);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: GlassCard(
-        padding: const EdgeInsets.all(12),
-        borderRadius: 16,
+      child: AppCard(
+        padding: 12,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -238,7 +241,7 @@ class _CommentBubble extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: AppColors.primary.withAlpha(25),
+                color: b.primarySubtle,
                 shape: BoxShape.circle,
               ),
               child: comment.authorAvatar != null
@@ -247,10 +250,10 @@ class _CommentBubble extends StatelessWidget {
                         comment.authorAvatar!,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) =>
-                            _initialsWidget(initials),
+                            _initialsWidget(initials, b),
                       ),
                     )
-                  : _initialsWidget(initials),
+                  : _initialsWidget(initials, b),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -262,18 +265,18 @@ class _CommentBubble extends StatelessWidget {
                     children: [
                       Text(
                         comment.authorName,
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.dmSans(
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
-                          color: AppColors.textPrimary,
+                          color: b.textPrimary,
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
                         relativeDate,
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.dmSans(
                           fontSize: 11,
-                          color: AppColors.textLight,
+                          color: b.textTertiary,
                         ),
                       ),
                     ],
@@ -282,9 +285,9 @@ class _CommentBubble extends StatelessWidget {
                   // Contenido del comentario
                   Text(
                     comment.content,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.dmSans(
                       fontSize: 13,
-                      color: AppColors.textPrimary,
+                      color: b.textPrimary,
                     ),
                   ),
                 ],
@@ -303,14 +306,14 @@ class _CommentBubble extends StatelessWidget {
     return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
-  Widget _initialsWidget(String initials) {
+  Widget _initialsWidget(String initials, BrumaTheme b) {
     return Center(
       child: Text(
         initials,
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.bold,
+        style: GoogleFonts.dmSans(
+          fontWeight: FontWeight.w700,
           fontSize: 13,
-          color: AppColors.primary,
+          color: b.primary,
         ),
       ),
     );

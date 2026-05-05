@@ -1,9 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../domain/app_categories.dart';
 import '../../features/auth/presentation/auth_screen.dart';
+import '../../features/accounts/presentation/accounts_screen.dart';
+import '../../features/accounts/presentation/credit_card_detail_screen.dart';
+import '../../features/budget/presentation/budget_screen.dart';
+import '../../features/budget/presentation/stats_screen.dart';
 import '../../features/transactions/presentation/add_expense_screen.dart';
 import '../../features/transactions/presentation/add_income_screen.dart';
+import '../../features/transactions/transfer/add_transfer_screen.dart';
+import '../../features/bills/presentation/add_bill_screen.dart';
+import '../../features/bills/presentation/bills_screen.dart';
+import '../../features/dashboard/domain/account_model.dart';
+import '../../features/transactions/presentation/all_transactions_screen.dart';
 import '../../features/transactions/presentation/transaction_detail_screen.dart';
 import '../../features/transactions/presentation/widgets/category_selector.dart';
 import '../../features/transactions/domain/transaction_model.dart';
@@ -32,9 +42,12 @@ class _GoRouterRefreshStream extends ChangeNotifier {
 }
 
 /// Router global con redirect basado en estado de autenticación.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final appRouter = GoRouter(
   initialLocation: AppRoutes.auth,
   debugLogDiagnostics: true,
+  navigatorKey: rootNavigatorKey,
   refreshListenable: _GoRouterRefreshStream(supabase.auth.onAuthStateChange),
   redirect: (context, state) {
     final session = supabase.auth.currentSession;
@@ -59,6 +72,21 @@ final appRouter = GoRouter(
       name: AppRoutes.dashboardName,
       builder: (context, state) => const MainShell(),
     ),
+    GoRoute(
+      path: AppRoutes.stats,
+      name: AppRoutes.statsName,
+      builder: (context, state) => const StatsScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.budget,
+      name: AppRoutes.budgetName,
+      builder: (context, state) => const BudgetScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.accounts,
+      name: AppRoutes.accountsName,
+      builder: (context, state) => const AccountsScreen(),
+    ),
 
     // ── Pantallas modales (se apilan sobre la navbar) ──────────────────────
     GoRoute(
@@ -76,6 +104,21 @@ final appRouter = GoRouter(
       builder: (context, state) => const AddIncomeScreen(),
     ),
     GoRoute(
+      path: AppRoutes.addTransfer,
+      name: AppRoutes.addTransferName,
+      builder: (context, state) => const AddTransferScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.bills,
+      name: AppRoutes.billsName,
+      builder: (context, state) => const BillsScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.addBill,
+      name: AppRoutes.addBillName,
+      builder: (context, state) => const AddBillScreen(),
+    ),
+    GoRoute(
       path: AppRoutes.pockets,
       name: AppRoutes.pocketsName,
       builder: (context, state) => const PocketsScreen(),
@@ -86,6 +129,11 @@ final appRouter = GoRouter(
       builder: (context, state) => const SharedSpacesScreen(),
     ),
     GoRoute(
+      path: AppRoutes.transactions,
+      name: AppRoutes.transactionsName,
+      builder: (context, state) => const AllTransactionsScreen(),
+    ),
+    GoRoute(
       path: AppRoutes.transactionDetail,
       name: AppRoutes.transactionDetailName,
       builder: (context, state) {
@@ -94,25 +142,22 @@ final appRouter = GoRouter(
         return TransactionDetailScreen(transaction: transaction);
       },
     ),
+    GoRoute(
+      path: AppRoutes.creditCardDetail,
+      name: AppRoutes.creditCardDetailName,
+      builder: (context, state) {
+        final account = state.extra as Account?;
+        if (account == null) return const ErrorScreen(error: null);
+        return CreditCardDetailScreen(account: account);
+      },
+    ),
   ],
 );
 
 /// Mapea el query param ?category= a un [CategoryItem].
 CategoryItem? _categoryFromKey(String? key) {
   if (key == null) return null;
-  const mapping = {
-    'food': '🍔',
-    'transport': '🚗',
-    'rent': '🏠',
-    'leisure': '🎮',
-    'grocery': '🛒',
-    'health': '💊',
-  };
-  final emoji = mapping[key.toLowerCase()];
-  if (emoji == null) return null;
-  try {
-    return kCategories.firstWhere((c) => c.emoji == emoji);
-  } catch (_) {
-    return null;
-  }
+  final category = AppCategories.findById(key);
+  if (category == null || !category.isExpense) return null;
+  return CategoryItem.fromAppCategory(category);
 }

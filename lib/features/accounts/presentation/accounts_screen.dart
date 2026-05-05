@@ -2,142 +2,163 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/router/app_routes.dart';
 import '../../../core/providers/tenant_provider.dart';
-import '../../../core/widgets/glass_card.dart';
-import '../../dashboard/data/dashboard_repository.dart';
+import '../../../core/animations/bruma_animations.dart';
+import '../../../core/widgets/amount_input_field.dart';
+import '../../../core/widgets/balance_display.dart';
+import '../../../core/widgets/account_card.dart';
+import '../../../core/widgets/app_card.dart';
 import '../../dashboard/domain/account_model.dart';
 import '../data/accounts_repository.dart';
-import '../../../core/router/app_routes.dart';
-import '../../transactions/domain/transaction_model.dart';
+import '../data/credit_card_repository.dart';
 
-/// Pantalla de cuentas bancarias y efectivo del usuario.
+// ═══════════════════════════════════════════════════════════════════════════════
+// AccountsScreen — Basado EXACTAMENTE en AccountsScreen de Bruma.html
+// Balance centrado, distribución, lista AccountCard full, botón dashed agregar
+// ═══════════════════════════════════════════════════════════════════════════════
+
 class AccountsScreen extends ConsumerWidget {
   const AccountsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.bruma;
     final tenantAsync = ref.watch(tenantProvider);
-    final formatter = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: b.bg,
       body: SafeArea(
         child: tenantAsync.when(
-          loading: () => const Center(
-              child: CircularProgressIndicator(color: AppColors.primary)),
+          loading: () => Center(
+            child: CircularProgressIndicator(color: b.primary),
+          ),
           error: (err, _) => Center(child: Text('Error: $err')),
           data: (tenantId) {
             final accountsAsync = ref.watch(allAccountsProvider(tenantId));
             final totalAsync = ref.watch(totalBalanceProvider(tenantId));
-            final recentAsync = ref.watch(recentTransactionsProvider(tenantId));
 
             return ListView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.only(bottom: 120),
               children: [
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-                // ── Header ──────────────────────────────────────────
-                Text(
-                  'My Accounts',
-                  style: GoogleFonts.poppins(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                totalAsync.when(
-                  data: (total) => Text(
-                    'Total balance: ${formatter.format(total)}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
+                // ── Balance total centrado ──────────────────────────
+                FadeUpAnimation(
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Text(
+                          'PATRIMONIO TOTAL',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: b.textSecondary,
+                            letterSpacing: 0.06 * 13,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        totalAsync.when(
+                          data: (total) =>
+                              BalanceDisplay(value: total, fontSize: 36),
+                          loading: () => SizedBox(
+                            height: 44,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: b.primary,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+                          error: (_, __) =>
+                              const BalanceDisplay(value: 0, fontSize: 36),
+                        ),
+                      ],
                     ),
                   ),
-                  loading: () => const SizedBox(height: 20),
-                  error: (_, __) => const SizedBox.shrink(),
                 ),
                 const SizedBox(height: 24),
 
-                // ── Lista de cuentas ─────────────────────────────────
-                accountsAsync.when(
-                  loading: () => const Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.primary)),
-                  error: (err, _) => Text('Error: $err'),
-                  data: (accounts) {
-                    if (accounts.isEmpty) {
-                      return _EmptyAccounts();
-                    }
-                    return Column(
-                      children: accounts
-                          .map((acc) => _AccountCard(
-                                account: acc,
-                                formatter: formatter,
-                                onDeleted: () =>
-                                    ref.invalidate(allAccountsProvider(tenantId)),
-                                onRenamed: () =>
-                                    ref.invalidate(allAccountsProvider(tenantId)),
-                              ))
-                          .toList(),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // ── Botón Add Account ────────────────────────────────
-                _AddAccountButton(
-                  onCreated: () {
-                    ref.invalidate(allAccountsProvider(tenantId));
-                    ref.invalidate(totalBalanceProvider(tenantId));
-                  },
-                  tenantId: tenantId,
-                ),
-
-                const SizedBox(height: 32),
-
-                // ── Transacciones recientes ──────────────────────────
-                Text(
-                  'Recent Transactions',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                // ── Distribución ──────────────────────────────────
+                FadeUpAnimation(
+                  delayMs: 100,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: accountsAsync.when(
+                      data: (accounts) => _DistributionCard(accounts: accounts),
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                recentAsync.when(
-                  loading: () => const Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.primary)),
-                  error: (err, _) => Text('Error: $err'),
-                  data: (transactions) {
-                    final limited = transactions.take(5).toList();
-                    if (limited.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Text(
-                          'Sin transacciones aún',
-                          style: GoogleFonts.poppins(
-                              color: AppColors.textSecondary),
-                        ),
-                      );
-                    }
-                    return Column(
-                      children: limited
-                          .map((tx) => _RecentTransactionTile(
-                                transaction: tx,
-                                formatter: formatter,
-                              ))
-                          .toList(),
-                    );
-                  },
+                const SizedBox(height: 24),
+
+                // ── Título "Mis cuentas" ──────────────────────────
+                FadeUpAnimation(
+                  delayMs: 150,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'Mis cuentas',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: b.textPrimary,
+                        letterSpacing: -0.02 * 17,
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 100),
+                const SizedBox(height: 16),
+
+                // ── Lista de cuentas ────────────────────────────────
+                FadeUpAnimation(
+                  delayMs: 200,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: accountsAsync.when(
+                      loading: () => Center(
+                        child: CircularProgressIndicator(color: b.primary),
+                      ),
+                      error: (err, _) => Text('Error: $err'),
+                      data: (accounts) {
+                        if (accounts.isEmpty) {
+                          return _EmptyAccounts();
+                        }
+                        return Column(
+                          children: [
+                            ...accounts.map((acc) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _TappableAccountCard(
+                                    account: acc,
+                                    onDeleted: () => ref.invalidate(
+                                        allAccountsProvider(tenantId)),
+                                    onRenamed: () => ref.invalidate(
+                                        allAccountsProvider(tenantId)),
+                                  ),
+                                )),
+
+                            // ── Botón dashed "Agregar cuenta" ────────
+                            const SizedBox(height: 4),
+                            _AddAccountButton(
+                              onCreated: () {
+                                ref.invalidate(allAccountsProvider(tenantId));
+                                ref.invalidate(totalBalanceProvider(tenantId));
+                              },
+                              tenantId: tenantId,
+                            ),
+
+                            // ── Botón transferir ────────────────────
+                            const SizedBox(height: 12),
+                            _TransferButton(),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ],
             );
           },
@@ -147,102 +168,121 @@ class AccountsScreen extends ConsumerWidget {
   }
 }
 
-// ─── Account Card ─────────────────────────────────────────────────────────────
+// ── Distribución ────────────────────────────────────────────────────────────
 
-class _AccountCard extends ConsumerWidget {
+class _DistributionCard extends StatelessWidget {
+  final List<Account> accounts;
+  const _DistributionCard({required this.accounts});
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.bruma;
+    final positiveAccounts = accounts.where((a) => a.balance > 0).toList();
+    final totalPositive =
+        positiveAccounts.fold<double>(0, (s, a) => s + a.balance);
+
+    if (positiveAccounts.isEmpty) return const SizedBox.shrink();
+
+    return AppCard(
+      padding: 16,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Distribución',
+            style: GoogleFonts.dmSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: b.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Barra de colores
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 6,
+              child: Row(
+                children: positiveAccounts.map((acc) {
+                  final pct = acc.balance / totalPositive;
+                  final color = kAccountTypeColors[acc.type] ?? b.primary;
+                  return Expanded(
+                    flex: (pct * 1000).toInt().clamp(1, 1000),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Leyenda
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: positiveAccounts.map((acc) {
+              final color = kAccountTypeColors[acc.type] ?? b.primary;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    acc.name,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: b.textSecondary,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── AccountCard con opciones (long press) ──────────────────────────────────
+
+class _TappableAccountCard extends ConsumerWidget {
   final Account account;
-  final NumberFormat formatter;
   final VoidCallback onDeleted;
   final VoidCallback onRenamed;
 
-  const _AccountCard({
+  const _TappableAccountCard({
     required this.account,
-    required this.formatter,
     required this.onDeleted,
     required this.onRenamed,
   });
 
-  /// Devuelve emoji e icono según tipo de cuenta
-  (String, Color) _typeInfo() {
-    switch (account.type.toLowerCase()) {
-      case 'bank':
-        return ('🏦', const Color(0xFF1565C0));
-      case 'credit_card':
-        return ('💳', AppColors.primary);
-      default:
-        return ('💵', const Color(0xFF2E7D32));
-    }
-  }
-
-  String _typeLabel() {
-    switch (account.type.toLowerCase()) {
-      case 'bank':
-        return 'Bank Account';
-      case 'credit_card':
-        return 'Credit Card';
-      default:
-        return 'Cash';
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final (emoji, color) = _typeInfo();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
-        onLongPress: () => _showOptions(context, ref),
-        child: GlassCard(
-          padding: const EdgeInsets.all(20),
-          borderRadius: 20,
-          child: Row(
-            children: [
-              // Ícono tipo cuenta
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: color.withAlpha(25),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Center(
-                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      account.name,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      _typeLabel(),
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                formatter.format(account.balance),
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
-          ),
-        ),
+    return GestureDetector(
+      onTap: account.isCreditCard
+          ? () => context.push(
+                AppRoutes.creditCardDetail,
+                extra: account,
+              )
+          : null,
+      onLongPress: () => _showOptions(context, ref),
+      child: AccountCard(
+        name: account.name,
+        type: account.type,
+        balance: account.balance,
+        compact: false,
       ),
     );
   }
@@ -259,7 +299,7 @@ class _AccountCard extends ConsumerWidget {
   }
 }
 
-// ─── Account Options Dialog ───────────────────────────────────────────────────
+// ── Account Options Dialog ──────────────────────────────────────────────────
 
 class _AccountOptionsDialog extends ConsumerStatefulWidget {
   final Account account;
@@ -277,8 +317,7 @@ class _AccountOptionsDialog extends ConsumerStatefulWidget {
       _AccountOptionsDialogState();
 }
 
-class _AccountOptionsDialogState
-    extends ConsumerState<_AccountOptionsDialog> {
+class _AccountOptionsDialogState extends ConsumerState<_AccountOptionsDialog> {
   final _nameController = TextEditingController();
   bool _editing = false;
   bool _loading = false;
@@ -297,17 +336,25 @@ class _AccountOptionsDialogState
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     return AlertDialog(
-      backgroundColor: Colors.white,
+      backgroundColor: b.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(
         widget.account.name,
-        style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        style: GoogleFonts.dmSans(
+          fontWeight: FontWeight.w700,
+          color: b.textPrimary,
+        ),
       ),
       content: _editing
           ? TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Nuevo nombre'),
+              style: GoogleFonts.dmSans(color: b.textPrimary),
+              decoration: InputDecoration(
+                labelText: 'Nuevo nombre',
+                labelStyle: GoogleFonts.dmSans(color: b.textSecondary),
+              ),
               autofocus: true,
             )
           : null,
@@ -315,29 +362,28 @@ class _AccountOptionsDialogState
         if (!_editing) ...[
           TextButton(
             onPressed: () => setState(() => _editing = true),
-            child: Text('Renombrar',
-                style: GoogleFonts.poppins(color: AppColors.primary)),
+            child:
+                Text('Renombrar', style: GoogleFonts.dmSans(color: b.primary)),
           ),
           TextButton(
             onPressed: _loading ? null : _deleteAccount,
-            child: Text('Eliminar',
-                style: GoogleFonts.poppins(color: Colors.red)),
+            child: Text('Eliminar', style: GoogleFonts.dmSans(color: b.error)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('Cancelar',
-                style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+                style: GoogleFonts.dmSans(color: b.textSecondary)),
           ),
         ] else ...[
           TextButton(
             onPressed: () => setState(() => _editing = false),
             child: Text('Cancelar',
-                style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+                style: GoogleFonts.dmSans(color: b.textSecondary)),
           ),
           FilledButton(
             onPressed: _loading ? null : _renameAccount,
-            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-            child: Text('Guardar', style: GoogleFonts.poppins()),
+            style: FilledButton.styleFrom(backgroundColor: b.primary),
+            child: Text('Guardar', style: GoogleFonts.dmSans()),
           ),
         ],
       ],
@@ -355,7 +401,10 @@ class _AccountOptionsDialogState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            backgroundColor: context.bruma.error,
+            content: Text('Error: $e'),
+          ),
         );
       }
     } finally {
@@ -376,7 +425,10 @@ class _AccountOptionsDialogState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            backgroundColor: context.bruma.error,
+            content: Text('Error: $e'),
+          ),
         );
       }
     } finally {
@@ -385,17 +437,21 @@ class _AccountOptionsDialogState
   }
 }
 
-// ─── Add Account Button ────────────────────────────────────────────────────────
+// ── Botón dashed "Agregar cuenta" ────────────────────────────────────────────
 
 class _AddAccountButton extends ConsumerWidget {
   final VoidCallback onCreated;
   final String tenantId;
 
-  const _AddAccountButton(
-      {required this.onCreated, required this.tenantId});
+  const _AddAccountButton({
+    required this.onCreated,
+    required this.tenantId,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.bruma;
+
     return GestureDetector(
       onTap: () {
         showDialog(
@@ -406,28 +462,96 @@ class _AddAccountButton extends ConsumerWidget {
           ),
         );
       },
-      child: Container(
-        height: 54,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: AppColors.primary,
-            width: 1.5,
-            // Dashed border via CustomPaint no está disponible directamente,
-            // usamos un borde sólido con opacidad
+      child: CustomPaint(
+        painter: _DashedBorderPainter(
+          color: b.border,
+          borderRadius: 20,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: Text(
+              '+ Agregar cuenta',
+              style: GoogleFonts.dmSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: b.primary,
+              ),
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Dashed border painter ──────────────────────────────────────────────────
+
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double borderRadius;
+
+  _DashedBorderPainter({required this.color, required this.borderRadius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        Offset.zero & size,
+        Radius.circular(borderRadius),
+      ));
+
+    // Dibujar dashes
+    const dashWidth = 8.0;
+    const dashSpace = 5.0;
+    final metrics = path.computeMetrics().first;
+    double distance = 0;
+
+    while (distance < metrics.length) {
+      final end = (distance + dashWidth).clamp(0.0, metrics.length);
+      canvas.drawPath(
+        metrics.extractPath(distance, end),
+        paint,
+      );
+      distance += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ── Botón de transferir ──────────────────────────────────────────────────────
+
+class _TransferButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final b = context.bruma;
+    return GestureDetector(
+      onTap: () => context.push(AppRoutes.addTransfer),
+      child: Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: b.primarySubtle,
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.add, color: AppColors.primary),
+            Icon(Icons.swap_horiz_rounded, color: b.primary, size: 20),
             const SizedBox(width: 8),
             Text(
-              'Add Account',
-              style: GoogleFonts.poppins(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w600,
+              'Transferir entre cuentas',
+              style: GoogleFonts.dmSans(
                 fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: b.primary,
               ),
             ),
           ],
@@ -437,14 +561,16 @@ class _AddAccountButton extends ConsumerWidget {
   }
 }
 
-// ─── Add Account Dialog ────────────────────────────────────────────────────────
+// ── Add Account Dialog ──────────────────────────────────────────────────────
 
 class _AddAccountDialog extends ConsumerStatefulWidget {
   final String tenantId;
   final VoidCallback onCreated;
 
-  const _AddAccountDialog(
-      {required this.tenantId, required this.onCreated});
+  const _AddAccountDialog({
+    required this.tenantId,
+    required this.onCreated,
+  });
 
   @override
   ConsumerState<_AddAccountDialog> createState() => _AddAccountDialogState();
@@ -453,26 +579,34 @@ class _AddAccountDialog extends ConsumerStatefulWidget {
 class _AddAccountDialogState extends ConsumerState<_AddAccountDialog> {
   final _nameCtrl = TextEditingController();
   final _balanceCtrl = TextEditingController();
+  final _creditLimitCtrl = TextEditingController();
+  final _billingCloseDayCtrl = TextEditingController();
+  final _paymentDueDayCtrl = TextEditingController();
   String _selectedType = 'cash';
   bool _loading = false;
 
   static const _types = [
-    ('cash', '💵', 'Cash'),
-    ('bank', '🏦', 'Bank'),
-    ('credit_card', '💳', 'Credit Card'),
+    ('cash', 'Efectivo'),
+    ('bank', 'Banco'),
+    ('credit_card', 'Crédito'),
   ];
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _balanceCtrl.dispose();
+    _creditLimitCtrl.dispose();
+    _billingCloseDayCtrl.dispose();
+    _paymentDueDayCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
+
     return Dialog(
-      backgroundColor: Colors.white,
+      backgroundColor: b.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -482,51 +616,119 @@ class _AddAccountDialogState extends ConsumerState<_AddAccountDialog> {
           children: [
             Text(
               'Nueva Cuenta',
-              style: GoogleFonts.poppins(
-                  fontSize: 18, fontWeight: FontWeight.bold),
+              style: GoogleFonts.dmSans(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: b.textPrimary,
+              ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _nameCtrl,
+              style: GoogleFonts.dmSans(color: b.textPrimary),
               decoration: InputDecoration(
                 labelText: 'Nombre de la cuenta',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                labelStyle: GoogleFonts.dmSans(color: b.textSecondary),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _balanceCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'Balance inicial (opcional)',
-                prefixText: '\$ ',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
+            if (_selectedType != 'credit_card') ...[
+              AmountInputField(
+                controller: _balanceCtrl,
+                autofocus: false,
+              ),
+              const SizedBox(height: 16),
+            ],
+            Text(
+              'Tipo de cuenta',
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: b.textSecondary,
               ),
             ),
-            const SizedBox(height: 16),
-            Text('Tipo de cuenta',
-                style: GoogleFonts.poppins(
-                    fontSize: 13, color: AppColors.textSecondary)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: _types.map((t) {
-                final (value, emoji, label) = t;
+                final (value, label) = t;
                 final selected = _selectedType == value;
-                return ChoiceChip(
-                  label:
-                      Text('$emoji $label', style: GoogleFonts.poppins()),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _selectedType = value),
-                  selectedColor: AppColors.primary,
-                  labelStyle: GoogleFonts.poppins(
-                    color: selected ? Colors.white : AppColors.textPrimary,
+                final typeColor = kAccountTypeColors[value] ?? b.primary;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedType = value),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? typeColor.withValues(alpha: 0.12)
+                          : b.surfaceAlt,
+                      border: Border.all(
+                        color: selected
+                            ? typeColor.withValues(alpha: 0.25)
+                            : b.border,
+                      ),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    child: Text(
+                      label,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
+                        color: selected ? typeColor : b.textSecondary,
+                      ),
+                    ),
                   ),
                 );
               }).toList(),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeInOut,
+              child: _selectedType == 'credit_card'
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: Column(
+                        children: [
+                          AmountInputField(
+                            controller: _creditLimitCtrl,
+                            autofocus: false,
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _billingCloseDayCtrl,
+                            keyboardType: TextInputType.number,
+                            style: GoogleFonts.dmSans(color: b.textPrimary),
+                            decoration: InputDecoration(
+                              labelText: 'Día de corte',
+                              labelStyle:
+                                  GoogleFonts.dmSans(color: b.textSecondary),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _paymentDueDayCtrl,
+                            keyboardType: TextInputType.number,
+                            style: GoogleFonts.dmSans(color: b.textPrimary),
+                            decoration: InputDecoration(
+                              labelText: 'Día límite de pago',
+                              labelStyle:
+                                  GoogleFonts.dmSans(color: b.textSecondary),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
             const SizedBox(height: 20),
             Row(
@@ -534,24 +736,30 @@ class _AddAccountDialogState extends ConsumerState<_AddAccountDialog> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Cancelar',
-                      style: GoogleFonts.poppins(
-                          color: AppColors.textSecondary)),
+                  child: Text(
+                    'Cancelar',
+                    style: GoogleFonts.dmSans(color: b.textSecondary),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _loading ? null : _create,
                   style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12))),
+                    backgroundColor: b.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   child: _loading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                      : Text('Crear', style: GoogleFonts.poppins()),
+                            color: b.onPrimary,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text('Crear', style: GoogleFonts.dmSans()),
                 ),
               ],
             ),
@@ -562,125 +770,126 @@ class _AddAccountDialogState extends ConsumerState<_AddAccountDialog> {
   }
 
   Future<void> _create() async {
+    final b = context.bruma;
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) return;
-    final balance = double.tryParse(_balanceCtrl.text) ?? 0;
+    final isCreditCard = _selectedType == 'credit_card';
+    final balance =
+        isCreditCard ? 0.0 : AmountInputField.parseAmount(_balanceCtrl.text);
+
+    final creditLimit = isCreditCard
+        ? AmountInputField.parseAmount(_creditLimitCtrl.text)
+        : null;
+    final billingCloseDay = _parseDay(_billingCloseDayCtrl.text);
+    final paymentDueDay = _parseDay(_paymentDueDayCtrl.text);
+
+    if (isCreditCard && creditLimit != null && creditLimit <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: b.error,
+          content: const Text('Ingresa un límite de crédito mayor a cero.'),
+        ),
+      );
+      return;
+    }
+
+    if (isCreditCard &&
+        !_isValidCreditCardDay(
+          billingCloseDay,
+          _billingCloseDayCtrl.text,
+        )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: b.error,
+          content: const Text('Ingresa un día de corte válido entre 1 y 31.'),
+        ),
+      );
+      return;
+    }
+
+    if (isCreditCard &&
+        !_isValidCreditCardDay(
+          paymentDueDay,
+          _paymentDueDayCtrl.text,
+        )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: b.error,
+          content:
+              const Text('Ingresa un día límite de pago válido entre 1 y 31.'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _loading = true);
     try {
-      await ref.read(accountsRepositoryProvider).createAccount(
-            tenantId: widget.tenantId,
-            name: name,
-            type: _selectedType,
-            initialBalance: balance,
-          );
+      final newAccountId =
+          await ref.read(accountsRepositoryProvider).createAccount(
+                tenantId: widget.tenantId,
+                name: name,
+                type: _selectedType,
+                initialBalance: balance,
+              );
+
+      if (isCreditCard) {
+        await ref.read(creditCardRepositoryProvider).updateCreditCardDetails(
+              accountId: newAccountId,
+              creditLimit:
+                  creditLimit == null || creditLimit <= 0 ? null : creditLimit,
+              billingCloseDay: billingCloseDay,
+              paymentDueDay: paymentDueDay,
+            );
+      }
+
       if (mounted) Navigator.pop(context);
       widget.onCreated();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            backgroundColor: b.error,
+            content: Text('Error: $e'),
+          ),
         );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
-}
 
-// ─── Recent Transaction Tile ──────────────────────────────────────────────────
+  int? _parseDay(String rawValue) {
+    final trimmed = rawValue.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed);
+  }
 
-class _RecentTransactionTile extends StatelessWidget {
-  final Transaction transaction;
-  final NumberFormat formatter;
-
-  const _RecentTransactionTile(
-      {required this.transaction, required this.formatter});
-
-  static const _catEmoji = {
-    'comida': '🍔',
-    'transporte': '🚗',
-    'renta': '🏠',
-    'ocio': '🎮',
-    'super': '🛒',
-    'salud': '💊',
-    'salary': '💼',
-    'freelance': '💻',
-    'gift': '🎁',
-    'investment': '📈',
-    'bonus': '💰',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final emoji = _catEmoji[transaction.category.toLowerCase()] ?? '💸';
-    final isIncome = transaction.type == 'income';
-    final color =
-        isIncome ? const Color(0xFF2E7D32) : const Color(0xFFEF4444);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: GestureDetector(
-        onTap: () => context.push(AppRoutes.transactionDetail, extra: transaction),
-        child: GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          borderRadius: 16,
-          child: Row(
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 20)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      transaction.notes ?? transaction.category,
-                      style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 14,
-                          color: AppColors.textPrimary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      DateFormat('dd MMM').format(transaction.date),
-                      style: GoogleFonts.poppins(
-                          fontSize: 11, color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '${isIncome ? '+' : '-'}${formatter.format(transaction.amount)}',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  bool _isValidCreditCardDay(int? value, String rawValue) {
+    final trimmed = rawValue.trim();
+    if (trimmed.isEmpty) return true;
+    return value != null && value >= 1 && value <= 31;
   }
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
+// ── Empty State ──────────────────────────────────────────────────────────────
 
 class _EmptyAccounts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
         children: [
-          const Text('🏦', style: TextStyle(fontSize: 48)),
+          Icon(Icons.account_balance_wallet_outlined,
+              color: b.textTertiary, size: 48),
           const SizedBox(height: 12),
           Text(
             'No tienes cuentas aún',
-            style: GoogleFonts.poppins(
-                fontSize: 15, color: AppColors.textSecondary),
+            style: GoogleFonts.dmSans(
+              fontSize: 15,
+              color: b.textTertiary,
+            ),
           ),
         ],
       ),

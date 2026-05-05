@@ -3,10 +3,14 @@ class Transaction {
   final String accountId;
   final String tenantId;
   final double amount;
-  final String type; // 'expense' | 'income'
+  final String type; // 'expense' | 'income' | 'transfer_in' | 'transfer_out'
   final String category;
   final String? notes;
   final DateTime date;
+  final String? transferId;
+  final String? linkedAccountId;
+  final bool hasSplit;
+  final bool isPendingSync;
 
   Transaction({
     required this.id,
@@ -17,6 +21,10 @@ class Transaction {
     required this.category,
     this.notes,
     required this.date,
+    this.transferId,
+    this.linkedAccountId,
+    this.hasSplit = false,
+    this.isPendingSync = false,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -29,6 +37,10 @@ class Transaction {
       category: json['category'] as String,
       notes: json['notes'] as String?,
       date: DateTime.parse(json['date'] as String),
+      transferId: json['transfer_id'] as String?,
+      linkedAccountId: json['linked_account_id'] as String?,
+      hasSplit: json['has_split'] as bool? ?? false,
+      isPendingSync: json['is_pending_sync'] as bool? ?? false,
     );
   }
 
@@ -41,6 +53,10 @@ class Transaction {
       'category': category,
       'notes': notes,
       'date': date.toIso8601String(),
+      'transfer_id': transferId,
+      'linked_account_id': linkedAccountId,
+      'has_split': hasSplit,
+      'is_pending_sync': isPendingSync,
     };
   }
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/glass_card.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../../domain/shared_member_model.dart';
 
 /// Muestra una lista de miembros de un espacio compartido con
@@ -13,21 +13,25 @@ class MembersList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.bruma;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
             'Miembros',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.dmSans(
               fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              color: b.textPrimary,
             ),
           ),
         ),
-        ...members.map((m) => _MemberTile(member: m)),
+        ...members.map((m) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _MemberTile(member: m),
+            )),
       ],
     );
   }
@@ -39,85 +43,73 @@ class _MemberTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     final isOwner = member.role == 'owner';
     final initials = _initials(member.name);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: GlassCard(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        borderRadius: 16,
-        child: Row(
-          children: [
-            // Avatar circular con iniciales
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isOwner
-                    ? AppColors.primary.withAlpha(30)
-                    : Colors.grey.withAlpha(30),
-              ),
-              child: member.avatarUrl != null
-                  ? ClipOval(
-                      child: Image.network(
-                        member.avatarUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            _initialsWidget(initials, isOwner),
-                      ),
-                    )
-                  : _initialsWidget(initials, isOwner),
+    return AppCard(
+      padding: 14,
+      child: Row(
+        children: [
+          // Avatar circular con iniciales
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isOwner ? b.primarySubtle : b.surfaceAlt,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    member.name,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: AppColors.textPrimary,
+            child: member.avatarUrl != null
+                ? ClipOval(
+                    child: Image.network(
+                      member.avatarUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          _initialsWidget(initials, isOwner, b),
                     ),
+                  )
+                : _initialsWidget(initials, isOwner, b),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  member.name,
+                  style: GoogleFonts.dmSans(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: b.textPrimary,
                   ),
-                  Text(
-                    isOwner ? 'Propietario' : 'Miembro',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: isOwner ? AppColors.primary : AppColors.textSecondary,
-                    ),
+                ),
+                Text(
+                  isOwner ? 'Propietario' : 'Miembro',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: isOwner ? b.primary : b.textSecondary,
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          // Badge de rol
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: isOwner ? b.primarySubtle : b.surfaceAlt,
+              borderRadius: BorderRadius.circular(100),
+            ),
+            child: Text(
+              isOwner ? 'Owner' : 'Member',
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isOwner ? b.primary : b.textSecondary,
               ),
             ),
-            // Badge de rol
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isOwner
-                    ? AppColors.primary.withAlpha(20)
-                    : Colors.grey.withAlpha(20),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isOwner
-                      ? AppColors.primary.withAlpha(60)
-                      : Colors.grey.withAlpha(60),
-                ),
-              ),
-              child: Text(
-                isOwner ? 'Owner' : 'Member',
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isOwner ? AppColors.primary : AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -131,14 +123,14 @@ class _MemberTile extends StatelessWidget {
     return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
-  Widget _initialsWidget(String initials, bool isOwner) {
+  Widget _initialsWidget(String initials, bool isOwner, BrumaTheme b) {
     return Center(
       child: Text(
         initials,
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.bold,
+        style: GoogleFonts.dmSans(
+          fontWeight: FontWeight.w700,
           fontSize: 16,
-          color: isOwner ? AppColors.primary : AppColors.textSecondary,
+          color: isOwner ? b.primary : b.textSecondary,
         ),
       ),
     );

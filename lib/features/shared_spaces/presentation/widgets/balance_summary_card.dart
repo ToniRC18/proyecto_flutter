@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/glass_card.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../../../../core/supabase/supabase_client.dart';
 import '../../data/shared_spaces_repository.dart';
 
-/// Tarjeta glassmorphism que muestra el balance de gastos entre miembros
+/// Tarjeta que muestra el balance de gastos entre miembros
 /// del espacio compartido: quién gastó cuánto y quién le debe a quién.
 class BalanceSummaryCard extends ConsumerWidget {
   final String tenantId;
@@ -15,39 +15,41 @@ class BalanceSummaryCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.bruma;
     final balanceAsync = ref.watch(balanceProvider(tenantId));
     final membersAsync = ref.watch(membersProvider(tenantId));
     final formatter = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final currentUserId = supabase.auth.currentUser?.id ?? '';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: GlassCard(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: AppCard(
+        padding: 18,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Balance del grupo',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.dmSans(
                 fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                color: b.textPrimary,
               ),
             ),
             const SizedBox(height: 12),
             balanceAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
+              loading: () => Center(
+                child: CircularProgressIndicator(color: b.primary),
               ),
               error: (err, _) => Text(
                 'Error al calcular balance',
-                style: GoogleFonts.poppins(color: Colors.red),
+                style: GoogleFonts.dmSans(color: b.error),
               ),
               data: (balance) {
                 if (balance.isEmpty) {
                   return Text(
                     'Sin gastos registrados aún',
-                    style: GoogleFonts.poppins(color: AppColors.textSecondary),
+                    style: GoogleFonts.dmSans(color: b.textSecondary),
                   );
                 }
 
@@ -74,10 +76,10 @@ class BalanceSummaryCard extends ConsumerWidget {
                             : memberNameMap[userId] ?? 'Usuario';
 
                         final color = diff > 0
-                            ? Colors.green.shade600
+                            ? b.success
                             : diff < 0
-                                ? Colors.red.shade600
-                                : AppColors.textSecondary;
+                                ? b.error
+                                : b.textSecondary;
 
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -86,9 +88,9 @@ class BalanceSummaryCard extends ConsumerWidget {
                               Expanded(
                                 child: Text(
                                   '$name gastó ${formatter.format(spent)}',
-                                  style: GoogleFonts.poppins(
+                                  style: GoogleFonts.dmSans(
                                     fontSize: 13,
-                                    color: AppColors.textPrimary,
+                                    color: b.textPrimary,
                                   ),
                                 ),
                               ),
@@ -98,7 +100,7 @@ class BalanceSummaryCard extends ConsumerWidget {
                                     : diff < 0
                                         ? '· debe ${formatter.format(diff.abs())}'
                                         : '· en equilibrio',
-                                style: GoogleFonts.poppins(
+                                style: GoogleFonts.dmSans(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                   color: color,

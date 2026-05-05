@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
-
+import '../../../../core/domain/app_categories.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class CategoryItem {
+  final String id;
   final String emoji;
   final String label;
-  
-  const CategoryItem(this.emoji, this.label);
+
+  const CategoryItem(this.id, this.emoji, this.label);
+
+  factory CategoryItem.fromAppCategory(AppCategory category) {
+    return CategoryItem(category.id, category.emoji, category.label);
+  }
 }
 
-const List<CategoryItem> kCategories = [
-  CategoryItem('🍔', 'Comida'),
-  CategoryItem('🚗', 'Transporte'),
-  CategoryItem('🏠', 'Renta'),
-  CategoryItem('🎮', 'Ocio'),
-  CategoryItem('🛒', 'Super'),
-  CategoryItem('💊', 'Salud'),
-];
+final List<CategoryItem> kCategories = AppCategories.expenses
+    .map(CategoryItem.fromAppCategory)
+    .toList(growable: false);
 
 class CategorySelector extends StatelessWidget {
   final CategoryItem selected;
@@ -31,6 +31,7 @@ class CategorySelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     return SizedBox(
       height: 48,
       child: ListView.builder(
@@ -50,21 +51,14 @@ class CategorySelector extends StatelessWidget {
               margin: const EdgeInsets.symmetric(horizontal: 6),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: isSelected 
-                  ? AppColors.primary 
-                  : AppColors.glassSurface,
-                borderRadius: BorderRadius.circular(24),
+                color: isSelected ? b.primary : b.surfaceAlt,
+                borderRadius: BorderRadius.circular(100),
                 border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.glassBorder,
-                  width: 1.5,
+                  color: isSelected
+                      ? b.primary
+                      : b.border,
+                  width: 1,
                 ),
-                boxShadow: isSelected ? [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  )
-                ] : [],
               ),
               child: Row(
                 children: [
@@ -72,10 +66,11 @@ class CategorySelector extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     cat.label,
-                    style: GoogleFonts.poppins(
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected ? Colors.white : AppColors.textPrimary,
-                      fontSize: 14,
+                    style: GoogleFonts.dmSans(
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isSelected ? b.onPrimary : b.textPrimary,
+                      fontSize: 13,
                     ),
                   ),
                 ],

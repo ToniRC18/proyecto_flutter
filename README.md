@@ -114,6 +114,8 @@ profiles → tenant_members → tenants
                                ↓
                             budgets
                                ↓
+                             bills → bill_payments
+                               ↓
                     transaction_comments (Realtime)
                     tenant_invitations
                     push_tokens
@@ -127,6 +129,8 @@ profiles → tenant_members → tenants
 | **accounts** | Carteras financieras dentro de un espacio. |
 | **transactions** | Registros de gastos e ingresos. |
 | **budgets** | Metas de ahorro y límites de gasto. |
+| **bills** | Pagos recurrentes vinculados a un espacio y, opcionalmente, a una cuenta. |
+| **bill_payments** | Historial de pagos realizados para cada bill, con vínculo opcional a una transacción. |
 | **transaction_comments** | Mensajería social ligada a transacciones. |
 | **tenant_invitations** | Gestión de acceso a espacios colaborativos. |
 | **push_tokens** | Registro de dispositivos para notificaciones FCM. |

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 import 'app_routes.dart';
 
 class ErrorScreen extends StatelessWidget {
@@ -11,8 +11,9 @@ class ErrorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: b.bg,
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -24,19 +25,20 @@ class ErrorScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 Text(
                   'Ruta no encontrada',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.dmSans(
                     fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    color: b.textPrimary,
+                    letterSpacing: -0.03 * 24,
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 Text(
                   'La página que buscas no existe.',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.dmSans(
                     fontSize: 14,
-                    color: AppColors.textSecondary,
+                    color: b.textSecondary,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -49,22 +51,22 @@ class ErrorScreen extends StatelessWidget {
                       vertical: 16,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(16),
+                      color: b.primary,
+                      borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
+                          color: b.primary.withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                     ),
                     child: Text(
                       'Volver al inicio',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.dmSans(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: b.onPrimary,
                       ),
                     ),
                   ),

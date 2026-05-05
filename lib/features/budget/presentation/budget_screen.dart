@@ -1,30 +1,41 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/domain/app_categories.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/tenant_provider.dart';
-import '../../../core/widgets/glass_card.dart';
+import '../../../core/animations/bruma_animations.dart';
+import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/amount_input_field.dart';
+import '../../../core/widgets/bruma_empty_state.dart';
+import '../../../core/widgets/category_pill.dart';
+import '../../../core/widgets/transaction_list_item.dart';
 import '../data/budget_repository.dart';
 
-/// Pantalla principal de presupuestos por categoría.
+// ═══════════════════════════════════════════════════════════════════════════════
+// BudgetScreen — Basado en StatsScreen/BudgetScreen de Bruma
+// Resumen mensual centrado, categorías con barras de progreso, FAB agregar
+// ═══════════════════════════════════════════════════════════════════════════════
+
 class BudgetScreen extends ConsumerWidget {
   const BudgetScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.bruma;
     final tenantAsync = ref.watch(tenantProvider);
     final now = DateTime.now();
-    final monthYear = DateFormat('MMMM yyyy').format(now);
-    final formatter = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final monthYear = DateFormat('MMMM yyyy', 'es_MX').format(now);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: b.bg,
       body: SafeArea(
         child: tenantAsync.when(
-          loading: () => const Center(
-              child: CircularProgressIndicator(color: AppColors.primary)),
+          loading: () => Center(
+            child: CircularProgressIndicator(color: b.primary),
+          ),
           error: (err, _) => Center(child: Text('Error: $err')),
           data: (tenantId) {
             final budgetsAsync = ref.watch(budgetsListProvider(tenantId));
@@ -34,92 +45,134 @@ class BudgetScreen extends ConsumerWidget {
               children: [
                 ListView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.only(bottom: 120),
                   children: [
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
                     // ── Header ──────────────────────────────────────
-                    Text(
-                      'Budget',
-                      style: GoogleFonts.poppins(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      monthYear,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: AppColors.textSecondary,
+                    FadeUpAnimation(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Presupuesto',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: b.textPrimary,
+                                letterSpacing: -0.03 * 22,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              monthYear,
+                              style: GoogleFonts.dmSans(
+                                fontSize: 14,
+                                color: b.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
 
                     // ── Summary card ─────────────────────────────────
-                    budgetsAsync.when(
-                      loading: () => const SizedBox.shrink(),
-                      error: (_, __) => const SizedBox.shrink(),
-                      data: (budgets) => spentAsync.when(
-                        loading: () => const SizedBox.shrink(),
-                        error: (_, __) => const SizedBox.shrink(),
-                        data: (spent) => _BudgetSummaryCard(
-                          budgets: budgets,
-                          spent: spent,
-                          formatter: formatter,
+                    FadeUpAnimation(
+                      delayMs: 100,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: budgetsAsync.when(
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                          data: (budgets) => spentAsync.when(
+                            loading: () => const SizedBox.shrink(),
+                            error: (_, __) => const SizedBox.shrink(),
+                            data: (spent) => _BudgetSummaryCard(
+                              budgets: budgets,
+                              spent: spent,
+                            ),
+                          ),
                         ),
                       ),
                     ),
+                    const SizedBox(height: 24),
 
-                    const SizedBox(height: 20),
-
-                    // ── Lista de budgets por categoría ───────────────
-                    budgetsAsync.when(
-                      loading: () => const Center(
-                          child: CircularProgressIndicator(
-                              color: AppColors.primary)),
-                      error: (err, _) =>
-                          Text('Error: $err', style: GoogleFonts.poppins()),
-                      data: (budgets) {
-                        if (budgets.isEmpty) {
-                          return _EmptyBudget(
-                            onAdd: () => _showAddBudgetSheet(
-                                context, ref, tenantId),
-                          );
-                        }
-                        return spentAsync.when(
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                          data: (spent) => Column(
-                            children: budgets.map((b) {
-                              final spentAmt =
-                                  spent[b.category.toLowerCase()] ?? 0;
-                              return _BudgetCategoryCard(
-                                budget: b,
-                                spent: spentAmt,
-                                formatter: formatter,
-                                onDeleted: () =>
-                                    ref.invalidate(budgetsListProvider(tenantId)),
-                              );
-                            }).toList(),
+                    // ── Lista de budgets ──────────────────────────────
+                    FadeUpAnimation(
+                      delayMs: 200,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: budgetsAsync.when(
+                          loading: () => Center(
+                            child: CircularProgressIndicator(color: b.primary),
                           ),
-                        );
-                      },
+                          error: (err, _) => Text('Error: $err'),
+                          data: (budgets) {
+                            if (budgets.isEmpty) {
+                              return _EmptyBudget(
+                                onAdd: () =>
+                                    _showAddBudgetSheet(context, ref, tenantId),
+                              );
+                            }
+                            return spentAsync.when(
+                              loading: () => const SizedBox.shrink(),
+                              error: (_, __) => const SizedBox.shrink(),
+                              data: (spent) => Column(
+                                children: budgets.asMap().entries.map((entry) {
+                                  final budget = entry.value;
+                                  final spentAmt = spent[
+                                          AppCategories.normalizeId(
+                                              budget.category)] ??
+                                      0;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: _BudgetCategoryCard(
+                                      budget: budget,
+                                      spent: spentAmt,
+                                      index: entry.key,
+                                      onDeleted: () => ref.invalidate(
+                                          budgetsListProvider(tenantId)),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
-
-                    const SizedBox(height: 120),
                   ],
                 ),
 
-                // ── FAB para agregar budget ──────────────────────────
+                // ── FAB ──────────────────────────────────────────────
                 Positioned(
-                  right: 16,
-                  bottom: 16,
-                  child: FloatingActionButton(
-                    onPressed: () =>
-                        _showAddBudgetSheet(context, ref, tenantId),
-                    backgroundColor: AppColors.primary,
-                    child: const Icon(Icons.add, color: Colors.white),
+                  right: 20,
+                  bottom: 20,
+                  child: GestureDetector(
+                    onTap: () => _showAddBudgetSheet(context, ref, tenantId),
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: b.primary,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: b.primary.withValues(alpha: 0.3),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.add_rounded,
+                        color: b.onPrimary,
+                        size: 28,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -144,25 +197,23 @@ class BudgetScreen extends ConsumerWidget {
   }
 }
 
-// ─── Summary Card ─────────────────────────────────────────────────────────────
+// ── Summary Card ────────────────────────────────────────────────────────────
 
 class _BudgetSummaryCard extends StatelessWidget {
   final List<Budget> budgets;
   final Map<String, double> spent;
-  final NumberFormat formatter;
 
   const _BudgetSummaryCard({
     required this.budgets,
     required this.spent,
-    required this.formatter,
   });
 
   @override
   Widget build(BuildContext context) {
-    final totalBudget =
-        budgets.fold<double>(0, (sum, b) => sum + b.amount);
-    final totalSpent =
-        spent.values.fold<double>(0, (sum, v) => sum + v);
+    final b = context.bruma;
+    final formatter = NumberFormat('#,##0', 'es_MX');
+    final totalBudget = budgets.fold<double>(0, (sum, bg) => sum + bg.amount);
+    final totalSpent = spent.values.fold<double>(0, (sum, v) => sum + v);
     final percentage =
         totalBudget > 0 ? (totalSpent / totalBudget).clamp(0.0, 1.0) : 0.0;
     final remaining = totalBudget - totalSpent;
@@ -170,53 +221,68 @@ class _BudgetSummaryCard extends StatelessWidget {
     Color barColor;
     String message;
     if (percentage < 0.5) {
-      barColor = AppColors.primary;
-      message = 'You have ${formatter.format(remaining)} left this month 🌿';
+      barColor = b.success;
+      message = 'Te quedan \$${formatter.format(remaining)} este mes 🌿';
     } else if (percentage < 0.8) {
-      barColor = const Color(0xFFF59E0B);
-      message = "You're on track 👍";
+      barColor = b.warning;
+      message = 'Vas bien, sigue así 👍';
     } else {
-      barColor = const Color(0xFFEF4444);
-      message = 'Almost at your limit 🌊';
+      barColor = b.error;
+      message = 'Casi al límite 🌊';
     }
 
-    return GlassCard(
-      padding: const EdgeInsets.all(24),
-      borderRadius: 24,
+    return AppCard(
+      padding: 24,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Total Budget',
-            style: GoogleFonts.poppins(
+            'PRESUPUESTO TOTAL',
+            style: GoogleFonts.dmSans(
               fontSize: 12,
-              color: AppColors.textSecondary,
               fontWeight: FontWeight.w500,
+              color: b.textSecondary,
+              letterSpacing: 0.06 * 12,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${formatter.format(totalSpent)} spent of ${formatter.format(totalBudget)}',
-            style: GoogleFonts.poppins(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+          const SizedBox(height: 8),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '\$${formatter.format(totalSpent)}',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: b.textPrimary,
+                    letterSpacing: -0.03 * 24,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                TextSpan(
+                  text: ' / \$${formatter.format(totalBudget)}',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    color: b.textTertiary,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
-          // Barra de progreso animada
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: percentage),
             duration: const Duration(milliseconds: 800),
             curve: Curves.easeOut,
             builder: (_, val, __) {
               return ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: val,
-                  backgroundColor: Colors.white.withAlpha(127),
+                  backgroundColor: b.surfaceAlt,
                   valueColor: AlwaysStoppedAnimation<Color>(barColor),
-                  minHeight: 12,
+                  minHeight: 6,
                 ),
               );
             },
@@ -224,10 +290,9 @@ class _BudgetSummaryCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             message,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.dmSans(
               fontSize: 13,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
+              color: b.textSecondary,
             ),
           ),
         ],
@@ -236,77 +301,100 @@ class _BudgetSummaryCard extends StatelessWidget {
   }
 }
 
-// ─── Budget Category Card ──────────────────────────────────────────────────────
+// ── Budget Category Card ────────────────────────────────────────────────────
 
 class _BudgetCategoryCard extends ConsumerWidget {
   final Budget budget;
   final double spent;
-  final NumberFormat formatter;
+  final int index;
   final VoidCallback onDeleted;
 
   const _BudgetCategoryCard({
     required this.budget,
     required this.spent,
-    required this.formatter,
+    required this.index,
     required this.onDeleted,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.bruma;
+    final formatter = NumberFormat('#,##0', 'es_MX');
     final percentage =
         budget.amount > 0 ? (spent / budget.amount).clamp(0.0, 1.0) : 0.0;
+    final catColor = kCategoryColors[budget.category] ?? b.primary;
 
     Color barColor;
     if (percentage < 0.5) {
-      barColor = AppColors.primary;
+      barColor = b.success;
     } else if (percentage < 0.8) {
-      barColor = const Color(0xFFF59E0B);
+      barColor = b.warning;
     } else {
-      barColor = const Color(0xFFEF4444);
+      barColor = b.error;
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+    return FadeUpAnimation(
+      delayMs: index * 50,
       child: GestureDetector(
         onLongPress: () => _confirmDelete(context, ref),
-        child: GlassCard(
-          padding: const EdgeInsets.all(16),
-          borderRadius: 20,
+        child: AppCard(
+          padding: 16,
           child: Column(
             children: [
               Row(
                 children: [
-                  Text(budget.emoji,
-                      style: const TextStyle(fontSize: 22)),
-                  const SizedBox(width: 12),
+                  // Ícono de categoría
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: catColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        budget.emoji,
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          budget.category,
-                          style: GoogleFonts.poppins(
+                          AppCategories.labelForId(budget.category),
+                          style: GoogleFonts.dmSans(
                             fontWeight: FontWeight.w600,
                             fontSize: 15,
-                            color: AppColors.textPrimary,
+                            color: b.textPrimary,
                           ),
                         ),
                         Text(
-                          '${formatter.format(spent)} of ${formatter.format(budget.amount)}',
-                          style: GoogleFonts.poppins(
+                          '\$${formatter.format(spent)} / \$${formatter.format(budget.amount)}',
+                          style: GoogleFonts.dmSans(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: b.textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Text(
-                    '${(percentage * 100).toInt()}%',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: barColor,
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: barColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    child: Text(
+                      '${(percentage * 100).toInt()}%',
+                      style: GoogleFonts.dmSans(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: barColor,
+                      ),
                     ),
                   ),
                 ],
@@ -317,12 +405,12 @@ class _BudgetCategoryCard extends ConsumerWidget {
                 duration: const Duration(milliseconds: 600),
                 curve: Curves.easeOut,
                 builder: (_, val, __) => ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: val,
-                    backgroundColor: Colors.white.withAlpha(127),
+                    backgroundColor: b.surfaceAlt,
                     valueColor: AlwaysStoppedAnimation<Color>(barColor),
-                    minHeight: 8,
+                    minHeight: 6,
                   ),
                 ),
               ),
@@ -334,18 +422,30 @@ class _BudgetCategoryCard extends ConsumerWidget {
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
+    final b = context.bruma;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Eliminar presupuesto',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        content: Text('¿Eliminar el presupuesto de ${budget.category}?',
-            style: GoogleFonts.poppins()),
+        backgroundColor: b.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Eliminar presupuesto',
+          style: GoogleFonts.dmSans(
+            fontWeight: FontWeight.w700,
+            color: b.textPrimary,
+          ),
+        ),
+        content: Text(
+          '¿Eliminar el presupuesto de ${AppCategories.labelForId(budget.category)}?',
+          style: GoogleFonts.dmSans(color: b.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar',
-                style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.dmSans(color: b.textSecondary),
+            ),
           ),
           FilledButton(
             onPressed: () async {
@@ -364,9 +464,8 @@ class _BudgetCategoryCard extends ConsumerWidget {
                 }
               }
             },
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444)),
-            child: Text('Eliminar', style: GoogleFonts.poppins()),
+            style: FilledButton.styleFrom(backgroundColor: b.error),
+            child: Text('Eliminar', style: GoogleFonts.dmSans()),
           ),
         ],
       ),
@@ -374,38 +473,27 @@ class _BudgetCategoryCard extends ConsumerWidget {
   }
 }
 
-// ─── Add Budget Bottom Sheet ───────────────────────────────────────────────────
+// ── Add Budget Bottom Sheet ─────────────────────────────────────────────────
 
 class _AddBudgetBottomSheet extends ConsumerStatefulWidget {
   final String tenantId;
   final VoidCallback onCreated;
 
-  const _AddBudgetBottomSheet(
-      {required this.tenantId, required this.onCreated});
+  const _AddBudgetBottomSheet({
+    required this.tenantId,
+    required this.onCreated,
+  });
 
   @override
   ConsumerState<_AddBudgetBottomSheet> createState() =>
       _AddBudgetBottomSheetState();
 }
 
-class _AddBudgetBottomSheetState
-    extends ConsumerState<_AddBudgetBottomSheet> {
+class _AddBudgetBottomSheetState extends ConsumerState<_AddBudgetBottomSheet> {
   final _amountCtrl = TextEditingController();
-  String _selectedCategory = 'Comida';
+  String _selectedCategory = AppCategories.expenses.first.id;
   String _selectedPeriod = 'monthly';
   bool _loading = false;
-
-  static const _categories = [
-    ('🍔', 'Comida'),
-    ('🚗', 'Transporte'),
-    ('🏠', 'Renta'),
-    ('🎮', 'Ocio'),
-    ('🛒', 'Super'),
-    ('💊', 'Salud'),
-    ('👗', 'Ropa'),
-    ('📱', 'Tech'),
-    ('➕', 'Otro'),
-  ];
 
   @override
   void dispose() {
@@ -415,188 +503,122 @@ class _AddBudgetBottomSheetState
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(230),
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: EdgeInsets.fromLTRB(
-              24, 16, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Handle
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+    final b = context.bruma;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: b.bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        12,
+        20,
+        24 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: b.border,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'New Budget',
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Selector de categoría
-                Text('Categoría',
-                    style: GoogleFonts.poppins(
-                        fontSize: 13, color: AppColors.textSecondary)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _categories.map((c) {
-                    final (emoji, label) = c;
-                    final isSelected = _selectedCategory == label;
-                    return GestureDetector(
-                      onTap: () =>
-                          setState(() => _selectedCategory = label),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primary
-                              : Colors.grey.withAlpha(25),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.primary
-                                : Colors.grey.withAlpha(50),
-                          ),
-                        ),
-                        child: Text(
-                          '$emoji $label',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: isSelected
-                                ? Colors.white
-                                : AppColors.textPrimary,
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Campo de monto
-                TextField(
-                  controller: _amountCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  style: GoogleFonts.poppins(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: '\$0.00',
-                    hintStyle: GoogleFonts.poppins(
-                      fontSize: 22,
-                      color: AppColors.textLight,
-                    ),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(
-                          color: AppColors.primary, width: 2),
-                    ),
-                    prefixText: '\$ ',
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Selector de período
-                Text('Período',
-                    style: GoogleFonts.poppins(
-                        fontSize: 13, color: AppColors.textSecondary)),
-                const SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      _PeriodButton(
-                        label: 'Monthly',
-                        selected: _selectedPeriod == 'monthly',
-                        onTap: () =>
-                            setState(() => _selectedPeriod = 'monthly'),
-                      ),
-                      _PeriodButton(
-                        label: 'Weekly',
-                        selected: _selectedPeriod == 'weekly',
-                        onTap: () =>
-                            setState(() => _selectedPeriod = 'weekly'),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Botón Save Budget
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton(
-                    onPressed: _loading ? null : _save,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: _loading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : Text(
-                            'Save Budget',
-                            style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16),
-                          ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: 16),
+            Text(
+              'Nuevo presupuesto',
+              style: GoogleFonts.dmSans(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: b.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Categoría
+            Text(
+              'Categoría',
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: b.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: AppCategories.expenses.map((category) {
+                return CategoryPill(
+                  category: category.id,
+                  label: '${category.emoji} ${category.label}',
+                  selected: _selectedCategory == category.id,
+                  onTap: () => setState(() => _selectedCategory = category.id),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // Monto
+            AmountInputField(
+              controller: _amountCtrl,
+              autofocus: false,
+            ),
+            const SizedBox(height: 16),
+
+            // Período
+            Text(
+              'Período',
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: b.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: b.surfaceAlt,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  _PeriodButton(
+                    label: 'Mensual',
+                    selected: _selectedPeriod == 'monthly',
+                    onTap: () => setState(() => _selectedPeriod = 'monthly'),
+                  ),
+                  _PeriodButton(
+                    label: 'Semanal',
+                    selected: _selectedPeriod == 'weekly',
+                    onTap: () => setState(() => _selectedPeriod = 'weekly'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Botón guardar
+            AppButton(
+              label: 'Guardar presupuesto',
+              onPressed: _save,
+              loading: _loading,
+            ),
+          ],
         ),
       ),
     );
   }
 
   Future<void> _save() async {
-    final amount = double.tryParse(_amountCtrl.text);
-    if (amount == null || amount <= 0) return;
+    final amount = AmountInputField.parseAmount(_amountCtrl.text);
+    if (amount <= 0) return;
 
     setState(() => _loading = true);
     try {
@@ -620,18 +642,22 @@ class _AddBudgetBottomSheetState
   }
 }
 
+// ── Period Button ──────────────────────────────────────────────────────────
+
 class _PeriodButton extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
-  const _PeriodButton(
-      {required this.label,
-      required this.selected,
-      required this.onTap});
+  const _PeriodButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -639,16 +665,15 @@ class _PeriodButton extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: selected ? AppColors.primary : Colors.transparent,
+            color: selected ? b.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
             child: Text(
               label,
-              style: GoogleFonts.poppins(
-                color: selected ? Colors.white : AppColors.textSecondary,
-                fontWeight:
-                    selected ? FontWeight.w600 : FontWeight.w400,
+              style: GoogleFonts.dmSans(
+                color: selected ? b.onPrimary : b.textSecondary,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 fontSize: 14,
               ),
             ),
@@ -659,7 +684,7 @@ class _PeriodButton extends StatelessWidget {
   }
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
+// ── Empty State ──────────────────────────────────────────────────────────────
 
 class _EmptyBudget extends StatelessWidget {
   final VoidCallback onAdd;
@@ -669,28 +694,16 @@ class _EmptyBudget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Column(
-        children: [
-          const Text('🎯', style: TextStyle(fontSize: 56)),
-          const SizedBox(height: 16),
-          Text(
-            'Set your first budget',
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: onAdd,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-            ),
-            child: Text('Create Budget', style: GoogleFonts.poppins()),
-          ),
-        ],
+      child: BrumaEmptyState(
+        type: BrumaEmptyType.budgets,
+        title: 'Sin presupuestos aún',
+        subtitle: 'Define límites por categoría',
+        action: AppButton(
+          label: 'Crear presupuesto',
+          onPressed: onAdd,
+          expanded: false,
+          small: true,
+        ),
       ),
     );
   }

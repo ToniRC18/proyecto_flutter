@@ -3,11 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme/app_colors.dart';
-import '../../core/router/app_routes.dart';
+import 'package:iconsax/iconsax.dart';
+import '../theme/app_theme.dart';
+import '../router/app_routes.dart';
+import 'pending_sync_badge.dart';
 
-/// BottomNavigationBar personalizada con botón "+" elevado en el centro.
-/// Maneja 5 ítems: Home | Accounts | [+] | Budget | Profile
+// ═══════════════════════════════════════════════════════════════════════════════
+// BrumaBottomNav — Basado EXACTAMENTE en BottomNav de Bruma.html
+// Row: 4 tabs (2 + FAB + 2), dot indicator, backdrop blur
+// ═══════════════════════════════════════════════════════════════════════════════
+
 class AppBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -20,136 +25,135 @@ class AppBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 65 + MediaQuery.of(context).padding.bottom,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // ── Barra de fondo ─────────────────────────────────────────
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  height: 65 + MediaQuery.of(context).padding.bottom,
-                  decoration: const BoxDecoration(
-                    color: Color(0xF2FFFFFF), // white 95% opacity
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(20),
-                    ),
-                    border: Border(
-                      top: BorderSide(color: Color(0xFFE0E0E0), width: 1),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.of(context).padding.bottom,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _NavItem(
-                          icon: Icons.home_rounded,
-                          label: 'Home',
-                          index: 0,
-                          currentIndex: currentIndex,
-                          onTap: onTap,
-                        ),
-                        _NavItem(
-                          icon: Icons.account_balance_wallet_rounded,
-                          label: 'Accounts',
-                          index: 1,
-                          currentIndex: currentIndex,
-                          onTap: onTap,
-                        ),
-                        // Espacio para el botón central
-                        const SizedBox(width: 64),
-                        _NavItem(
-                          icon: Icons.pie_chart_rounded,
-                          label: 'Budget',
-                          index: 3,
-                          currentIndex: currentIndex,
-                          onTap: onTap,
-                        ),
-                        _NavItem(
-                          icon: Icons.person_rounded,
-                          label: 'Profile',
-                          index: 4,
-                          currentIndex: currentIndex,
-                          onTap: onTap,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+    final b = context.bruma;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-          // ── Botón "+" central elevado ──────────────────────────────
-          Positioned(
-            top: -28,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: _CenterPlusButton(),
+    return SizedBox(
+      height: 84 + bottomPadding,
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: b.surface.withOpacity(0.88),
+              border: Border(
+                top: BorderSide(color: b.border, width: 1),
+              ),
+            ),
+            padding: EdgeInsets.only(
+              bottom: bottomPadding,
+              left: 8,
+              right: 8,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                // Tab 0: Home
+                _NavTab(
+                  icon: Iconsax.home_2,
+                  index: 0,
+                  currentIndex: currentIndex,
+                  onTap: onTap,
+                  tokens: b,
+                ),
+                // Tab 1: Accounts
+                _NavTab(
+                  icon: Iconsax.wallet_2,
+                  index: 1,
+                  currentIndex: currentIndex,
+                  onTap: onTap,
+                  tokens: b,
+                ),
+                // FAB central
+                _CenterFab(tokens: b),
+                // Tab 2: Stats (internamente índice 3)
+                _NavTab(
+                  icon: Iconsax.chart_square,
+                  index: 3,
+                  currentIndex: currentIndex,
+                  onTap: onTap,
+                  tokens: b,
+                ),
+                // Tab 3: Profile (internamente índice 4)
+                _NavTab(
+                  icon: Iconsax.profile_circle,
+                  index: 4,
+                  currentIndex: currentIndex,
+                  onTap: onTap,
+                  tokens: b,
+                  badge: const PendingSyncBadge(),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-// ─── Ítem de navegación ───────────────────────────────────────────────────────
+// ── Tab individual con dot indicator ──────────────────────────────────────────
 
-class _NavItem extends StatelessWidget {
+class _NavTab extends StatelessWidget {
   final IconData icon;
-  final String label;
   final int index;
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final BrumaTheme tokens;
+  final Widget? badge;
 
-  const _NavItem({
+  const _NavTab({
     required this.icon,
-    required this.label,
     required this.index,
     required this.currentIndex,
     required this.onTap,
+    required this.tokens,
+    this.badge,
   });
 
   @override
   Widget build(BuildContext context) {
     final isActive = currentIndex == index;
+
     return GestureDetector(
       onTap: () => onTap(index),
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: 60,
+        width: 56,
+        height: 56,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                AnimatedScale(
+                  scale: isActive ? 1.15 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.elasticOut,
+                  child: Icon(
+                    icon,
+                    size: 22,
+                    color: isActive ? tokens.primary : tokens.textTertiary,
+                  ),
+                ),
+                if (badge != null)
+                  Positioned(
+                    top: -6,
+                    right: -8,
+                    child: badge!,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // Dot indicator
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              child: Icon(
-                icon,
-                size: 24,
-                color: isActive ? AppColors.primary : Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 10,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                color: isActive ? AppColors.primary : Colors.grey,
+              width: isActive ? 16 : 4,
+              height: 4,
+              decoration: BoxDecoration(
+                color: isActive ? tokens.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
           ],
@@ -159,160 +163,175 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-// ─── Botón central "+" ────────────────────────────────────────────────────────
+// ── FAB central con sombra y scale ────────────────────────────────────────────
 
-class _CenterPlusButton extends StatefulWidget {
+class _CenterFab extends StatefulWidget {
+  final BrumaTheme tokens;
+  const _CenterFab({required this.tokens});
+
   @override
-  State<_CenterPlusButton> createState() => _CenterPlusButtonState();
+  State<_CenterFab> createState() => _CenterFabState();
 }
 
-class _CenterPlusButtonState extends State<_CenterPlusButton> {
+class _CenterFabState extends State<_CenterFab> {
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
+    final t = widget.tokens;
+
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
+        HapticFeedback.lightImpact();
         _mostrarOpciones(context);
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
-        scale: _pressed ? 0.9 : 1.0,
-        duration: const Duration(milliseconds: 100),
+        scale: _pressed ? 0.93 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.elasticOut,
         child: Container(
-          width: 58,
-          height: 58,
+          width: 56,
+          height: 56,
           decoration: BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
+            color: t.primary,
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withAlpha(102), // 0.4 opacity
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+                color: t.primary.withOpacity(0.3),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
-          child: const Icon(Icons.add, color: Colors.white, size: 28),
+          child: Icon(
+            Icons.add_rounded,
+            color: t.onPrimary,
+            size: 28,
+          ),
         ),
       ),
     );
   }
 
-  /// Muestra BottomSheet glassmorphism con opciones Add Expense / Add Income
+  /// Muestra bottom sheet con opciones de agregar
   void _mostrarOpciones(BuildContext context) {
-    HapticFeedback.lightImpact();
+    final b = context.bruma;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AddOptionsSheet(
-        onExpense: () {
-          Navigator.pop(context);
-          context.push(AppRoutes.addExpense);
-        },
-        onIncome: () {
-          Navigator.pop(context);
-          context.push(AppRoutes.addIncome);
-        },
-      ),
+      builder: (_) => _AddOptionsSheet(tokens: b),
     );
   }
 }
 
-// ─── BottomSheet glassmorphism ────────────────────────────────────────────────
+// ── Bottom sheet de opciones (rediseñado con tokens Bruma) ────────────────────
 
 class _AddOptionsSheet extends StatelessWidget {
-  final VoidCallback onExpense;
-  final VoidCallback onIncome;
-
-  const _AddOptionsSheet({
-    required this.onExpense,
-    required this.onIncome,
-  });
+  final BrumaTheme tokens;
+  const _AddOptionsSheet({required this.tokens});
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(230),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: const Border(
-              top: BorderSide(color: Color(0x99FFFFFF), width: 1.5),
+    return Container(
+      decoration: BoxDecoration(
+        color: tokens.bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        12,
+        20,
+        24 + MediaQuery.of(context).padding.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: tokens.border,
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
-          padding: EdgeInsets.fromLTRB(
-            24,
-            16,
-            24,
-            24 + MediaQuery.of(context).padding.bottom,
+          const SizedBox(height: 20),
+          Text(
+            'Agregar',
+            style: GoogleFonts.dmSans(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: tokens.textPrimary,
+              letterSpacing: -0.02 * 17,
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Agregar',
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-              // Botón Add Expense
-              _OptionButton(
-                emoji: '💸',
-                label: 'Add Expense',
-                color: const Color(0xFFEF4444),
-                bgColor: const Color(0x14EF4444),
-                onTap: onExpense,
-              ),
-              const SizedBox(height: 12),
-
-              // Botón Add Income
-              _OptionButton(
-                emoji: '💰',
-                label: 'Add Income',
-                color: const Color(0xFF2E7D32),
-                bgColor: const Color(0x142E7D32),
-                onTap: onIncome,
-              ),
-            ],
+          // Opciones
+          _OptionRow(
+            icon: Iconsax.money_send,
+            label: 'Registrar gasto',
+            color: tokens.error,
+            tokens: tokens,
+            onTap: () {
+              Navigator.pop(context);
+              context.push(AppRoutes.addExpense);
+            },
           ),
-        ),
+          const SizedBox(height: 10),
+          _OptionRow(
+            icon: Iconsax.money_recive,
+            label: 'Registrar ingreso',
+            color: tokens.success,
+            tokens: tokens,
+            onTap: () {
+              Navigator.pop(context);
+              context.push(AppRoutes.addIncome);
+            },
+          ),
+          const SizedBox(height: 10),
+          _OptionRow(
+            icon: Iconsax.arrow_swap_horizontal,
+            label: 'Transferir',
+            color: tokens.primary,
+            tokens: tokens,
+            onTap: () {
+              Navigator.pop(context);
+              context.push(AppRoutes.addTransfer);
+            },
+          ),
+          const SizedBox(height: 10),
+          _OptionRow(
+            icon: Iconsax.calendar_1,
+            label: 'Pago recurrente',
+            color: tokens.warning,
+            tokens: tokens,
+            onTap: () {
+              Navigator.pop(context);
+              context.push(AppRoutes.addBill);
+            },
+          ),
+        ],
       ),
     );
   }
 }
 
-class _OptionButton extends StatelessWidget {
-  final String emoji;
+class _OptionRow extends StatelessWidget {
+  final IconData icon;
   final String label;
   final Color color;
-  final Color bgColor;
+  final BrumaTheme tokens;
   final VoidCallback onTap;
 
-  const _OptionButton({
-    required this.emoji,
+  const _OptionRow({
+    required this.icon,
     required this.label,
     required this.color,
-    required this.bgColor,
+    required this.tokens,
     required this.onTap,
   });
 
@@ -322,26 +341,35 @@ class _OptionButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withAlpha(50), width: 1.5),
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(0.15), width: 1),
         ),
         child: Row(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 24)),
-            const SizedBox(width: 16),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: color,
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.dmSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
               ),
             ),
-            const Spacer(),
-            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: color),
+            Icon(Icons.chevron_right_rounded, color: color, size: 20),
           ],
         ),
       ),

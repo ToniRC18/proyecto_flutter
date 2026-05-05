@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/domain/app_categories.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/glass_card.dart';
 import '../../data/dashboard_repository.dart';
@@ -66,7 +67,7 @@ class SharedPockets extends ConsumerWidget {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  budget.category,
+                                  AppCategories.labelForId(budget.category),
                                   style: GoogleFonts.poppins(
                                     fontWeight: FontWeight.w500,
                                     fontSize: 13,

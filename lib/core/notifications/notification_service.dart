@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// Importa el archivo generado por FlutterFire CLI (debes ejecutar `flutterfire configure` primero)
-// import '../../firebase_options.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import '../../firebase_options.dart';
 
 /// Handler de mensajes en background — debe ser una función top-level.
 /// Se marca con @pragma('vm:entry-point') para que no sea eliminada por tree-shaking.
@@ -12,10 +14,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Asegurar que Firebase esté inicializado en el isolate de background
   await Firebase.initializeApp(
-    // options: DefaultFirebaseOptions.currentPlatform,
+    options: DefaultFirebaseOptions.currentPlatform,
   );
   // Aquí puedes loguear o guardar el mensaje si lo necesitas
   // Los mensajes con notification payload se muestran automáticamente por FCM
+}
+
+/// Handler para taps en notificaciones locales cuando la app está en background.
+@pragma('vm:entry-point')
+void notificationTapBackgroundHandler(NotificationResponse details) {
+  NotificationService.handleNotificationPayload(details.payload);
 }
 
 /// Plugin global de notificaciones locales
@@ -30,15 +38,23 @@ const AndroidNotificationChannel _expensesChannel = AndroidNotificationChannel(
   importance: Importance.high,
 );
 
+const AndroidNotificationChannel _billsChannel = AndroidNotificationChannel(
+  'bills',
+  'Pagos recurrentes',
+  description: 'Recordatorios locales de pagos recurrentes',
+  importance: Importance.high,
+);
+
 /// Servicio centralizado de notificaciones push (FCM) y locales.
 class NotificationService {
+  const NotificationService();
+
   /// Inicializa Firebase, solicita permisos, registra el token FCM en
   /// Supabase y configura los listeners de mensajes.
-  static Future<void> init() async {
+  Future<void> initialize() async {
     // 1. Inicializar Firebase
     await Firebase.initializeApp(
-      // Descomenta la línea siguiente después de ejecutar `flutterfire configure`
-      // options: DefaultFirebaseOptions.currentPlatform,
+      options: DefaultFirebaseOptions.currentPlatform,
     );
 
     // 2. Registrar el handler de background ANTES de cualquier otra cosa
@@ -52,6 +68,7 @@ class NotificationService {
     );
 
     // 4. Configurar flutter_local_notifications
+    await _configurarZonaHoraria();
     await _configurarNotificacionesLocales();
 
     // 5. Obtener y guardar token FCM en Supabase
@@ -75,6 +92,10 @@ class NotificationService {
     }
   }
 
+  static Future<void> init() async {
+    await const NotificationService().initialize();
+  }
+
   // ─── Helpers privados ────────────────────────────────────────────────────
 
   /// Configura el canal de Android y la inicialización del plugin local.
@@ -84,10 +105,18 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_expensesChannel);
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_billsChannel);
 
     // Configuración de inicialización
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const darwinInit = DarwinInitializationSettings();
+    const darwinInit = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
     const initSettings = InitializationSettings(
       android: androidInit,
       iOS: darwinInit,
@@ -95,11 +124,30 @@ class NotificationService {
 
     await flutterLocalNotificationsPlugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: (details) {
-        // Maneja tap en notificación local cuando la app está en foreground
-        // El routeo se hace desde NotificationHandler
-      },
+      onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse:
+          notificationTapBackgroundHandler,
     );
+
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+  }
+
+  /// Inicializa la zona horaria local para programar recordatorios exactos.
+  static Future<void> _configurarZonaHoraria() async {
+    tz.initializeTimeZones();
+    final timeZoneName = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(timeZoneName));
   }
 
   /// Obtiene el token FCM y lo guarda (o actualiza) en la tabla push_tokens.
@@ -173,15 +221,46 @@ class NotificationService {
         ),
         iOS: const DarwinNotificationDetails(),
       ),
-      payload: message.data.toString(),
+      payload: _encodePayload(message.data),
     );
+  }
+
+  /// Procesa taps en notificaciones locales cuando la app está activa.
+  static void _onDidReceiveNotificationResponse(
+    NotificationResponse details,
+  ) {
+    handleNotificationPayload(details.payload);
   }
 
   /// Determina la ruta destino al abrir una notificación.
   static void _manejarTapNotificacion(RemoteMessage message) {
-    // El routeo real lo realiza NotificationHandler usando el contexto del navegador.
-    // Aquí guardamos el payload para que NotificationHandler lo procese.
     _pendingNavigationData = message.data;
+  }
+
+  static void handleNotificationPayload(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    if (payload.startsWith('bill_')) {
+      _pendingNavigationData = {'screen': 'bills'};
+      return;
+    }
+    _pendingNavigationData = _decodePayload(payload);
+  }
+
+  static String _encodePayload(Map<String, dynamic> data) {
+    return data.entries.map((entry) => '${entry.key}=${entry.value}').join('&');
+  }
+
+  static Map<String, dynamic> _decodePayload(String payload) {
+    final Map<String, dynamic> result = {};
+    for (final segment in payload.split('&')) {
+      if (segment.isEmpty) continue;
+      final separator = segment.indexOf('=');
+      if (separator == -1) continue;
+      final key = segment.substring(0, separator);
+      final value = segment.substring(separator + 1);
+      result[key] = value;
+    }
+    return result;
   }
 
   /// Datos de navegación pendiente (para procesar después de que el router esté listo).

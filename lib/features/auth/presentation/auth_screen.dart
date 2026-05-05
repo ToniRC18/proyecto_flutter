@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/glass_card.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/animations/bruma_animations.dart';
+import '../../../core/widgets/app_input_field.dart';
+import '../../../core/widgets/app_button.dart';
 import '../data/auth_repository.dart';
-import 'widgets/auth_form.dart';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AuthScreen — Basado EXACTAMENTE en LoginScreen de screens-extra.jsx
+// SIN AppBar, logo "bruma." 32sp w800, tagline, campos AppInputField,
+// divider con "o", botón Google, toggle login↔register
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -21,12 +28,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
@@ -52,7 +61,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e.message),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: context.bruma.error,
           ),
         );
       }
@@ -61,7 +70,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error inesperado: $e'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: context.bruma.error,
           ),
         );
       }
@@ -76,84 +85,228 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       _nameController.clear();
       _emailController.clear();
       _passwordController.clear();
+      _confirmController.clear();
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final b = context.bruma;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: b.bg,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 32),
-
-                // Logo / título
-                Text(
-                  'Bruma',
-                  style: GoogleFonts.poppins(
-                    fontSize: 40,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                    height: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'tus finanzas, con calma',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-                const SizedBox(height: 40),
-
-                // Card con formulario
-                GlassCard(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(28.0),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _isLogin ? 'Bienvenido de vuelta' : 'Crea tu cuenta',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
+                      const SizedBox(height: 40),
+
+                      // ── Logo + tagline ─────────────────────────────
+                      FadeUpAnimation(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: 'bruma',
+                                    style: GoogleFonts.dmSans(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.04 * 32,
+                                      color: b.textPrimary,
+                                      height: 1,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: '.',
+                                    style: GoogleFonts.dmSans(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w800,
+                                      color: b.primary,
+                                      height: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Tu dinero, sin ansiedad.',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 14,
+                                color: b.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _isLogin
-                            ? 'Ingresa para continuar'
-                            : 'Empieza a controlar tus gastos',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
+                      const SizedBox(height: 36),
+
+                      // ── Formulario ──────────────────────────────────
+                      FadeUpAnimation(
+                        delayMs: 100,
+                        child: Column(
+                          children: [
+                            if (!_isLogin) ...[
+                              AppInputField(
+                                label: 'Nombre completo',
+                                controller: _nameController,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            AppInputField(
+                              label: 'Email',
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            const SizedBox(height: 14),
+                            AppInputField(
+                              label: 'Contraseña',
+                              controller: _passwordController,
+                              obscureText: true,
+                            ),
+                            if (!_isLogin) ...[
+                              const SizedBox(height: 14),
+                              AppInputField(
+                                label: 'Confirmar contraseña',
+                                controller: _confirmController,
+                                obscureText: true,
+                              ),
+                            ],
+
+                            // ¿Olvidaste tu contraseña? (solo login)
+                            if (_isLogin) ...[
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  '¿Olvidaste tu contraseña?',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: b.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+
+                            // Botón principal
+                            AppButton(
+                              label: _isLogin
+                                  ? 'Iniciar sesión'
+                                  : 'Crear cuenta',
+                              onPressed: _submit,
+                              loading: _isLoading,
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Divider "o"
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    height: 1,
+                                    color: b.border,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  child: Text(
+                                    'o',
+                                    style: GoogleFonts.dmSans(
+                                      fontSize: 12,
+                                      color: b.textTertiary,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Container(
+                                    height: 1,
+                                    color: b.border,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Botón Google
+                            AppButton(
+                              label: 'Continuar con Google',
+                              variant: AppButtonVariant.ghost,
+                              icon: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: SweepGradient(
+                                    colors: [
+                                      Color(0xFFEA4335),
+                                      Color(0xFFFBBC05),
+                                      Color(0xFF34A853),
+                                      Color(0xFF4285F4),
+                                      Color(0xFFEA4335),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              onPressed: () {
+                                // TODO: Google Sign-In
+                              },
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 28),
-                      AuthForm(
-                        isLogin: _isLogin,
-                        nameController: _nameController,
-                        emailController: _emailController,
-                        passwordController: _passwordController,
-                        isLoading: _isLoading,
-                        onSubmit: _submit,
-                        onToggleMode: _toggleMode,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
-              ],
-            ),
+              ),
+
+              // ── Toggle login/register ──────────────────────────
+              FadeUpAnimation(
+                delayMs: 200,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: GestureDetector(
+                    onTap: _toggleMode,
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: _isLogin
+                                ? '¿No tienes cuenta? '
+                                : '¿Ya tienes cuenta? ',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              color: b.textSecondary,
+                            ),
+                          ),
+                          TextSpan(
+                            text: _isLogin
+                                ? 'Regístrate'
+                                : 'Inicia sesión',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: b.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
